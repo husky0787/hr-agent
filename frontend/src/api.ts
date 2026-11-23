@@ -1,5 +1,14 @@
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
+export async function fetchSourceDocument(filename: string, signal?: AbortSignal): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/documents/${encodeURIComponent(filename)}`, { signal });
+  if (!res.ok) {
+    throw new Error(res.status === 404 ? '找不到這份公司文件。' : '暫時未能載入文件，請稍後再試。');
+  }
+  const data: { content: string } = await res.json();
+  return data.content;
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
@@ -36,6 +45,11 @@ export interface DemoEmployee {
   role: string;
   start_day: number;
   company: string;
+  company_zh: string;
+  department: string;
+  manager: string;
+  buddy: string;
+  is_demo: boolean;
 }
 
 export interface Checkin {
@@ -112,7 +126,8 @@ export async function completeTask(employeeId: string, taskId: number): Promise<
 }
 
 export async function resetOnboarding(employeeId: string): Promise<void> {
-  await fetch(`${API_BASE}/api/onboarding/${employeeId}/reset`, { method: 'POST' });
+  const res = await fetch(`${API_BASE}/api/onboarding/${employeeId}/reset`, { method: 'POST' });
+  if (!res.ok) throw new Error('未能重設示範，請稍後再試。');
 }
 
 export async function fetchCheckins(employeeId?: string): Promise<Checkin[]> {

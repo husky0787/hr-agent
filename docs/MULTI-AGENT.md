@@ -1,6 +1,6 @@
 # How the Multi-Agent Flow Works
 
-OnboardAI uses a **supervisor graph** (LangGraph), not a single chatbot. When you send a message, a security pre-check runs first, then an orchestrator delegates to specialist agents, then a synthesizer writes the final reply.
+HR Agent uses a **supervisor graph** (LangGraph), not a single chatbot. When you send a message, a security pre-check runs first, then an orchestrator delegates to specialist agents, then a synthesizer writes the final reply.
 
 ---
 
@@ -26,7 +26,7 @@ flowchart TB
 | **Security gate** | Blocks pure injection before agents run | None |
 | **Orchestrator** | Routes to specialists; disables workflow on injection | None (structured routing) |
 | **Research** | Handbook / policy Q&A with citations | `search_handbook_tool` |
-| **Workflow** | Onboarding tasks and check-ins | `create_onboarding_task_tool`, `list_onboarding_tasks_tool`, `schedule_checkin_tool` |
+| **Workflow** | Checklist-grounded tasks and check-ins | `search_handbook_tool`, `create_onboarding_task_tool`, `list_onboarding_tasks_tool`, `schedule_checkin_tool` |
 | **Synthesizer** | Merges specialist outputs into one answer | None |
 
 See [SECURITY.md](./SECURITY.md) for the full security layer.
@@ -43,8 +43,9 @@ See [SECURITY.md](./SECURITY.md) for the full security layer.
 
 ### 1. Orchestrator
 
-- Model: `gpt-4o-mini` with structured output (`RoutePlan`)
+- Uses the configured `OPENAI_MODEL` with structured output (`RoutePlan`)
 - Reads wrapped user message (+ last 4 chat turns)
+- Read-only company introductions and policy questions use research; explicit saved-task or check-in requests use workflow
 - If `injection_suspected` → forces `needs_workflow=false`
 - If pure attack → both flags false (but graph is already skipped at step 0)
 
@@ -57,6 +58,7 @@ See [SECURITY.md](./SECURITY.md) for the full security layer.
 ### 3. Workflow agent (if routed)
 
 - ReAct agent for tasks and check-ins
+- Searches the onboarding checklist before creating tasks and lists existing tasks to avoid duplicates
 - Write tools blocked when `injection_suspected=true`
 - Server-side validation in `shared/tasks.py`
 
@@ -64,7 +66,7 @@ See [SECURITY.md](./SECURITY.md) for the full security layer.
 
 - Built from specialist outputs (not raw user instructions)
 - `validate_output()` blocks hijacked canned responses
-- Temperature `0` for consistent behavior
+- Shares the configured model and provider with the other roles
 
 ---
 

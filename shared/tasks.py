@@ -6,6 +6,7 @@ from typing import Any
 from shared.db import _now_iso, get_connection, init_db
 
 VALID_CATEGORIES = {"HR", "IT", "Team"}
+CATEGORY_LOOKUP = {name.casefold(): name for name in VALID_CATEGORIES}
 MIN_DUE_DAY = 1
 MAX_DUE_DAY = 90
 MAX_TITLE_LENGTH = 200
@@ -31,9 +32,7 @@ def create_onboarding_task(
     if not MIN_DUE_DAY <= due_day <= MAX_DUE_DAY:
         raise ValueError(f"due_day must be between {MIN_DUE_DAY} and {MAX_DUE_DAY}")
 
-    category = category.strip().title()
-    if category not in VALID_CATEGORIES:
-        category = "Team"
+    category = CATEGORY_LOOKUP.get(category.strip().casefold(), "Team")
 
     with get_connection() as conn:
         with conn.cursor() as cur:

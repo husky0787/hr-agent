@@ -1,4 +1,4 @@
-# 執行 OnboardAI
+# 執行 HR Agent
 
 首次安裝 Python / Node.js / PostgreSQL、建立資料庫、設定 `.env` 及資料備份，請先閱讀 [README](../README.md)。以下命令均從專案根目錄執行；Windows 使用 PowerShell。
 
@@ -60,13 +60,13 @@ $env:RUN_EMBEDDING_INTEGRATION = "1"
 ./.venv/Scripts/python.exe -m pytest tests/test_rag.py tests/test_rag_integration.py -q
 ```
 
-已驗證共 17 項。測試使用臨時索引，不需要聊天 API Key、PostgreSQL 或 Docker。模型完整下載後，可先設定 `$env:HF_HUB_OFFLINE = "1"` 驗證離線檢索。
+已驗證共 22 項。測試使用臨時索引，不需要聊天 API Key、PostgreSQL 或 Docker。模型完整下載後，可先設定 `$env:HF_HUB_OFFLINE = "1"` 驗證離線檢索。
 
 混合語言檢索驗證的是預設前三條召回，不保證相關的跨語言片段一定排第一。知識文件變動後，需要按 README 的步驟重建索引。
 
 ## Golden / DeepEval
 
-原有 Golden 個案仍包含海外版本政策及已移除的問題，尚未全面遷移至香港知識文件。歷史 22/28 成績不代表目前版本的成績；詳細背景與操作見 [EVALS.md](EVALS.md)。
+Golden 及 DeepEval 共用 29 個港雀科技虛構公司個案，已對應目前香港示範知識文件。歷史 22/28 成績不代表目前版本的成績；詳細背景與操作見 [EVALS.md](EVALS.md)。
 
 使用 Docker 執行提示注入個案：
 

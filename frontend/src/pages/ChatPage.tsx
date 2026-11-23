@@ -10,8 +10,9 @@ import {
 } from '../api';
 import type { AgentEvent, ChatMessage, DemoEmployee, OnboardingStatus } from '../api';
 import ChatMarkdown from '../components/ChatMarkdown';
+import SourceDocument from '../components/SourceDocument';
 import { useTheme } from '../ThemeContext';
-import { AGENT_LABELS, CATEGORY_LABELS, SOURCE_LABELS, TOOL_LABELS, agentDescription } from '../locale';
+import { AGENT_LABELS, CATEGORY_LABELS, TOOL_LABELS, agentDescription } from '../locale';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -102,17 +103,7 @@ function ToolCallBadge({ name }: { name: string }) {
 }
 
 function CitationChip({ text }: { text: string }) {
-  return (
-    <motion.span
-      initial={{ opacity: 0, scale: 0.85 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium
-        bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400 border border-violet-200/60 dark:border-violet-800/50"
-      title={text}
-    >
-      {SOURCE_LABELS[text] ?? text}
-    </motion.span>
-  );
+  return <SourceDocument filename={text} />;
 }
 
 function StreamingText({ text, active }: { text: string; active: boolean }) {
@@ -256,22 +247,14 @@ function CircularProgress({ percent }: { percent: number }) {
 function OnboardingProgress({
   status,
   onComplete,
-  onReset,
 }: {
   status: OnboardingStatus | null;
   onComplete: (id: number) => void;
-  onReset: () => void;
 }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">入職進度</h2>
-        <button
-          onClick={onReset}
-          className="text-xs text-zinc-400 dark:text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-400 transition-colors"
-        >
-          重設
-        </button>
       </div>
 
       {status && (
@@ -387,17 +370,17 @@ function ChatMessageBubble({
 // ─── Suggestions ──────────────────────────────────────────────────────────────
 
 const SUGGESTIONS = [
-  '每年有多少天有薪年假？',
-  '我今日入職，第一星期要做甚麼？',
-  '入職後幾時要登記醫療保險？',
+  { title: '我是今天入職的工程師', message: '我今天以軟件工程師身份入職，請介紹公司、我的主管、入職夥伴及第一天要準備的事項。' },
+  { title: '查詢公司福利', message: '請介紹公司的有薪年假、醫療保險登記期限及健康津貼。' },
+  { title: '建立第一星期待辦', message: '請根據首 30 天入職安排，幫我建立第一星期的待辦事項。' },
 ];
 
-function EmptyState({ onSuggest }: { onSuggest: (s: string) => void }) {
+function EmptyState({ onSuggest, employee, disabled }: { onSuggest: (s: string) => void; employee: DemoEmployee | null; disabled: boolean }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center h-full gap-6 pb-8"
+      className="flex min-h-full flex-col items-center justify-center gap-5 py-6"
     >
       <div className="text-center">
         <div className="w-10 h-10 rounded-full bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center mx-auto mb-3">
@@ -405,25 +388,27 @@ function EmptyState({ onSuggest }: { onSuggest: (s: string) => void }) {
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
         </div>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-xs">
-          有關請假、福利、IT 設定或入職安排，都可以在這裏查詢。
+        <h1 className="mb-2 text-base font-semibold">{employee ? `${employee.company}｜${employee.company_zh}` : '香港團隊入職示範'}</h1>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-sm">
+          一家約 40 人的虛構香港軟件公司，為中小企開發 AI 工作流程工具。選擇情境開始體驗。
         </p>
       </div>
       <div className="flex flex-col gap-2 w-full max-w-sm">
         {SUGGESTIONS.map((s, i) => (
           <motion.button
-            key={s}
+            key={s.title}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.08 }}
-            onClick={() => onSuggest(s)}
+            onClick={() => onSuggest(s.message)}
+            disabled={disabled}
             className="text-left px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800
               bg-white dark:bg-zinc-900 text-sm text-zinc-700 dark:text-zinc-300
               hover:border-violet-300 dark:hover:border-violet-700
               hover:bg-violet-50 dark:hover:bg-violet-900/20
-              transition-all"
+              transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {s}
+            {s.title}
           </motion.button>
         ))}
       </div>
@@ -440,6 +425,8 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [agentLog, setAgentLog] = useState<AgentEvent[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -464,9 +451,10 @@ export default function ChatPage() {
 
   const handleSend = async (text?: string) => {
     const message = (text ?? input).trim();
-    if (!message || !employee || loading) return;
+    if (!message || !employee || loading || resetting) return;
 
     setInput('');
+    setNotice(null);
     setError(null);
     setLoading(true);
     setAgentLog([]);
@@ -498,9 +486,9 @@ export default function ChatPage() {
             return next;
           });
         }
-        if (event === 'citations') citations = data as string[];
+        if (event === 'citations') citations = [...new Set(data as string[])];
         if (event === 'tool_calls') {
-          toolCalls = (data as { name: string }[]).map((t) => t.name);
+          toolCalls = [...new Set((data as { name: string }[]).map((t) => t.name))];
         }
         if (event === 'agent_log') {
           const entry = data as AgentEvent;
@@ -544,11 +532,23 @@ export default function ChatPage() {
   };
 
   const handleReset = async () => {
-    if (!employee) return;
-    await resetOnboarding(employee.id);
-    setMessages([]);
-    setAgentLog([]);
-    await refreshStatus(employee.id);
+    if (!employee || loading || resetting) return;
+    setResetting(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await resetOnboarding(employee.id);
+      await refreshStatus(employee.id);
+      setMessages([]);
+      setAgentLog([]);
+      setInput('');
+      if (inputRef.current) inputRef.current.style.height = 'auto';
+      setNotice('示範已重設，可重新開始。');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '未能重設示範，請稍後再試。');
+    } finally {
+      setResetting(false);
+    }
   };
 
   const showThinking =
@@ -559,7 +559,7 @@ export default function ChatPage() {
         !messages[messages.length - 1]?.content));
 
   return (
-    <div className="h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 overflow-hidden">
+    <div className="h-full flex flex-col bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 overflow-hidden">
 
       {/* ── Header ── */}
       <header className="shrink-0 h-14 flex items-center justify-between px-4 sm:px-5 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
@@ -571,12 +571,7 @@ export default function ChatPage() {
             </svg>
           </div>
           <div>
-            <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">OnboardAI</span>
-            {employee && (
-              <span className="hidden sm:inline text-xs text-zinc-400 dark:text-zinc-400 ml-2">
-                {employee.name} · {employee.role === 'Software Engineer' ? '軟件工程師' : employee.role} · 入職第 {employee.start_day} 天
-              </span>
-            )}
+            <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">HR Agent</span>
           </div>
         </div>
 
@@ -615,7 +610,7 @@ export default function ChatPage() {
           入職進度 · 已完成 {status?.completion_percent ?? 0}%
         </summary>
         <div className="py-3">
-          <OnboardingProgress status={status} onComplete={handleComplete} onReset={handleReset} />
+          <OnboardingProgress status={status} onComplete={handleComplete} />
         </div>
       </details>
 
@@ -628,7 +623,7 @@ export default function ChatPage() {
           <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
             <AnimatePresence initial={false}>
               {messages.length === 0 && !loading && (
-                <EmptyState key="empty" onSuggest={handleSend} />
+                <EmptyState key="empty" onSuggest={handleSend} employee={employee} disabled={resetting || !employee} />
               )}
 
               {messages.map((msg, i) => {
@@ -680,6 +675,10 @@ export default function ChatPage() {
 
           {/* Input */}
           <div className="shrink-0 p-3 border-t border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
+            <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between gap-3 text-xs">
+              <span role="status" className="text-zinc-500 dark:text-zinc-400">{notice ?? '可查詢公司政策，或建立示範入職事項。'}</span>
+              <button type="button" onClick={handleReset} disabled={loading || resetting || !employee} title="清除示範待辦、跟進會面及本頁對話" className="shrink-0 rounded-md px-2 py-1 text-violet-600 hover:bg-violet-50 disabled:opacity-40 dark:text-violet-400 dark:hover:bg-violet-900/20">{resetting ? '正在重設…' : '重設示範'}</button>
+            </div>
             <form
               onSubmit={(e) => { e.preventDefault(); handleSend(); }}
               className="flex gap-2 items-end max-w-3xl mx-auto"
@@ -701,7 +700,7 @@ export default function ChatPage() {
                 }}
                 placeholder="輸入有關入職安排或公司政策的問題…"
                 aria-label="輸入問題"
-                disabled={loading}
+                disabled={loading || resetting}
                 className="flex-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl px-4 py-2.5 text-sm
                   placeholder:text-zinc-500 dark:placeholder:text-zinc-400
                   text-zinc-900 dark:text-zinc-100
@@ -712,7 +711,7 @@ export default function ChatPage() {
               <motion.button
                 type="submit"
                 aria-label={loading ? '正在回覆' : '傳送訊息'}
-                disabled={loading || !input.trim()}
+                disabled={loading || resetting || !employee || !input.trim()}
                 whileTap={{ scale: 0.9 }}
                 className="shrink-0 w-9 h-9 rounded-xl bg-violet-600 hover:bg-violet-700
                   disabled:opacity-40 disabled:cursor-not-allowed
@@ -737,7 +736,6 @@ export default function ChatPage() {
           <OnboardingProgress
             status={status}
             onComplete={handleComplete}
-            onReset={handleReset}
           />
         </aside>
       </div>

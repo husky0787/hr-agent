@@ -1,6 +1,6 @@
-# OnboardAI Security — Prompt Injection Defenses
+# HR Agent Security — Prompt Injection Defenses
 
-How OnboardAI protects against **prompt injection**: when a user embeds fake instructions in chat to hijack the AI.
+How HR Agent protects against **prompt injection**: when a user embeds fake instructions in chat to hijack the AI.
 
 Prompt injection is an **unsolved problem** for LLMs. We use **defense in depth** — multiple layers so casual attacks fail and dangerous side effects (task spam, data writes) are blocked in Python, not by trusting the model.
 
@@ -81,7 +81,7 @@ flowchart TD
 
 ```text
 I'm here to help with onboarding and company policies.
-What would you like to know about your first days at Acme Corp?
+What would you like to know about your first days at Harbour Finch Labs?
 ```
 
 ---

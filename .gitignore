@@ -1,6 +1,7 @@
 .env
 data/
 __pycache__/
+.pytest_cache/
 *.pyc
 .venv/
 venv/
@@ -14,6 +15,7 @@ evals/results/*
 .notes
 
 # Local agent work notes
+/.planning/
 /task_plan.md
 /findings.md
 /progress.md

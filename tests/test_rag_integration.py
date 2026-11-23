@@ -30,9 +30,14 @@ def isolated_index(tmp_path, monkeypatch):
         ("Which VPN should I install?", "it-setup.md", "Cisco AnyConnect"),
         ("我应该安装哪个虚拟专用网络软件？", "it-setup.md", "Cisco AnyConnect"),
         ("幾號出糧？", "employee-handbook.md", "出糧日期"),
-        ("侍產假有幾多天？", "benefits-guide.md", "5 天侍產假"),
-        ("產假有多少星期？", "benefits-guide.md", "14 星期產假"),
+        ("侍產假有幾多天？", "benefits-guide.md", "5 天全薪侍產假"),
+        ("產假有多少星期？", "benefits-guide.md", "14 星期全薪產假"),
         ("強積金登記及供款紀錄在哪裏查詢？", "benefits-guide.md", "強積金登記"),
+        ("公司每月的出糧日期是甚麼時候？", "employee-handbook.md", "最後一個工作天"),
+        ("上下班及午膳時間是幾點？", "employee-handbook.md", "09:30–18:30"),
+        ("年假結轉有甚麼期限？", "employee-handbook.md", "3 月 31 日"),
+        ("每年健康津貼有多少港幣？", "benefits-guide.md", "HKD 2,000"),
+        ("開支報銷的審批及付款流程是甚麼？", "benefits-guide.md", "5 個工作天"),
     ],
 )
 def test_seed_handbook_retrieval(isolated_index, query, source, expected):

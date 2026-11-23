@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 from agent.onboarding_agent import run_agent, stream_agent
 from agent.security import InputValidationError, validate_message_length
 from shared.config import DEFAULT_EMPLOYEE_ID
+from shared.company import DEMO_EMPLOYEE
+from shared.documents import read_document
 from shared.eval_results import load_eval_reports
 from shared.tasks import complete_task, get_onboarding_status, list_checkins, reset_employee_data
 
@@ -26,7 +28,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="OnboardAI API",
+    title="HR Agent — Harbour Finch Labs Demo",
     description="Autonomous HR onboarding agent",
     version="1.0.0",
     lifespan=lifespan,
@@ -65,6 +67,14 @@ def _validate_chat_request(request: ChatRequest) -> list[dict]:
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/documents/{filename}")
+def source_document(filename: str):
+    try:
+        return {"filename": filename, "content": read_document(filename)}
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Document not found") from None
 
 
 @app.post("/api/chat")
@@ -135,10 +145,4 @@ def eval_results():
 
 @app.get("/api/employee/demo")
 def demo_employee() -> dict[str, Any]:
-    return {
-        "id": DEFAULT_EMPLOYEE_ID,
-        "name": "Alex Chen",
-        "role": "Software Engineer",
-        "start_day": 1,
-        "company": "Acme Corp",
-    }
+    return dict(DEMO_EMPLOYEE)

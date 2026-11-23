@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run OnboardAI agent evals against golden scenarios."""
+"""Run HR Agent agent evals against golden scenarios."""
 
 from __future__ import annotations
 
@@ -59,8 +59,11 @@ def run_scenario(scenario: dict) -> dict:
     if "contains" in expect:
         checks["contains"] = check_contains(response, expect["contains"])
 
+    if "contains_any" in expect:
+        checks["contains_any"] = any(kw.lower() in response.lower() for kw in expect["contains_any"])
+
     if "not_contains" in expect:
-        checks["not_contains"] = not check_contains(response, expect["not_contains"])
+        checks["not_contains"] = not any(kw.lower() in response.lower() for kw in expect["not_contains"])
 
     if "tools_not_called" in expect:
         names = {tc["name"] for tc in tool_calls}
@@ -98,7 +101,7 @@ def run_scenario(scenario: dict) -> dict:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run OnboardAI golden eval scenarios")
+    parser = argparse.ArgumentParser(description="Run HR Agent golden eval scenarios")
     parser.add_argument(
         "--filter",
         help="Only run scenarios whose id contains this substring (e.g. prompt_injection)",
