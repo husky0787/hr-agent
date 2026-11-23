@@ -52,6 +52,7 @@ flowchart LR
 - **LangGraph ReAct agent** with 4 tools: handbook search, task creation, task listing, check-in scheduling
 - **Custom MCP server** exposing the same HR tools for Cursor/Claude integration
 - **Chroma RAG** over seed HR documents with source citations
+- **Local multilingual embeddings** — `intfloat/multilingual-e5-small` for Chinese and English retrieval, independent of the chat API provider
 - **React UI** — streaming chat, citation chips, tool-call indicators, onboarding progress sidebar
 - **Eval harness** — 28 golden scenarios testing retrieval, tool use, answer quality, and prompt-injection resistance
 - **Prompt-injection defenses** — input sandboxing, output guardrails, write-tool blocking, server-side tool validation

@@ -1,23 +1,41 @@
-# Acme Corp IT Setup Guide
+# Acme Corp IT 設定及資訊保安指南（香港）
 
-## Day 1 Essentials
+## 工作電腦
 
-1. **Laptop** — MacBook Pro or Dell XPS shipped to your home address before start date. Track shipment at it.acmecorp.com/shipments.
-2. **VPN** — Install Cisco AnyConnect using credentials sent to your personal email. Required for accessing internal systems remotely.
-3. **Slack** — Join workspace `acmecorp.slack.com`. Default channels: `#general`, `#team-{your-team}`, `#random`.
+工作電腦使用 MacBook Pro 或 Dell XPS。請按 IT 部門通知確認領取或送遞安排；如尚未收到電腦，請聯絡 IT 支援，切勿自行使用未經批准的私人裝置處理公司資料。
 
-## Security Requirements
+## VPN 設定
 
-- Enable **full-disk encryption** on your laptop within 24 hours.
-- Set up **2FA** on Google Workspace, Slack, and GitHub within 48 hours.
-- Never store company credentials in personal password managers without IT approval.
+安裝 **Cisco AnyConnect**，並使用 IT 部門發送至個人電郵的登入資料設定 VPN。連接公司內部系統時，請按系統要求使用公司 VPN；如登入失敗，請聯絡 IT 支援。
 
-## Developer Setup (Engineering)
+## Slack 設定
 
-- Request GitHub org access via IT ticket (category: Developer Access).
-- Clone repositories from `github.com/acmecorp`.
-- Install required tools: Docker, Node.js 20+, Python 3.11+.
+加入 `acmecorp.slack.com` 工作區，以及 `#general`、`#team-{your-team}` 和 `#random` 頻道。實際團隊頻道名稱由直屬主管確認。
 
-## Support
+## 磁碟加密
 
-IT helpdesk: `it-help@acmecorp.com` or Slack `#it-support`. Response SLA: 4 business hours.
+僱員須在取得工作電腦後 **24 小時內**啟用全碟加密。如不確定是否已啟用，請聯絡 IT 支援協助檢查。
+
+## 雙重認證
+
+僱員須在 **48 小時內**為 Google Workspace、Slack 及 GitHub 帳戶啟用雙重認證（2FA）。請妥善保管復原碼；遺失手機或無法登入時，請聯絡 IT 支援。
+
+## 密碼管理
+
+未經 IT 部門批准，不得將公司帳戶密碼儲存在私人密碼管理工具中。不得與他人共用密碼、雙重認證碼或 VPN 登入資料。
+
+## 個人資料及機密文件
+
+身份證副本、銀行戶口及僱員資料須透過公司批准的安全渠道處理，並只向有工作需要的人員開放。不得在公開聊天室張貼個人資料，或將公司機密文件轉存至未經批准的私人雲端空間。
+
+## 可疑電郵、裝置遺失及保安事故
+
+如收到可疑電郵、懷疑帳戶被盜用或遺失工作裝置，應立即聯絡 IT 支援並保留相關紀錄。切勿向可疑對象提供密碼或認證碼。專用事故通報渠道及其他應變步驟，須由資訊保安負責人確認。
+
+## 開發環境及系統權限
+
+透過 IT 工單申請 GitHub 組織存取權限，工單類別選擇 Developer Access。程式碼儲存庫位於 `github.com/acmecorp`。按專案要求安裝 Docker、Node.js 20+ 及 Python 3.11+。測試環境、正式環境及發佈權限須分別申請，審批人及申請渠道由團隊負責人確認。
+
+## IT 支援聯絡方式
+
+電郵：`it-help@acmecorp.com`；Slack 頻道：`#it-support`。一般支援的回覆目標為 **4 個工作小時**；這不代表問題必定在同一時限內解決。保安事故須即時通報，不應等待一般支援回覆。

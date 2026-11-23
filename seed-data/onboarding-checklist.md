@@ -1,35 +1,47 @@
-# Acme Corp 30-Day Onboarding Checklist
+# Acme Corp 首 30 天入職安排（香港）
 
-## Week 1 — Foundations
+## 第一星期：完成基本入職安排
 
-| Day | Task | Category |
-|-----|------|----------|
-| 1 | Complete HR paperwork and direct deposit setup | HR |
-| 1 | Set up laptop, VPN, and Slack | IT |
-| 1 | Meet your onboarding buddy | Team |
-| 2 | Enroll in health insurance (deadline: day 30) | HR |
-| 3 | Complete security training module | IT |
-| 5 | 1:1 with direct manager — goals and expectations | Team |
+| 入職日數 | 工作事項 | 類別 |
+|---|---|---|
+| 第 1 天 | 完成人事文件及出糧戶口登記，並與人力資源部核對強積金登記安排 | HR |
+| 第 1 天 | 設定工作電腦、VPN、公司電郵及 Slack | IT |
+| 第 1 天 | 與負責協助新同事入職的同事見面，了解團隊成員及日常協作方式 | Team |
+| 第 2 天 | 辦理醫療保險登記，須於入職後 30 天內完成 | HR |
+| 第 3 天 | 完成資訊保安培訓 | IT |
+| 第 5 天 | 與直屬主管進行一對一會面，確認工作職責及首月目標 | Team |
 
-## Week 2 — Integration
+## 第二星期：熟習團隊及工作流程
 
-| Day | Task | Category |
-|-----|------|----------|
-| 7 | Attend company all-hands meeting | Team |
-| 8 | Review team codebase / product documentation | Team |
-| 10 | Complete benefits overview session with HR | HR |
+| 入職日數 | 工作事項 | 類別 |
+|---|---|---|
+| 第 7 天 | 出席公司全體員工會議 | Team |
+| 第 8 天 | 閱讀所屬團隊的程式碼或產品文件，了解日常工作流程 | Team |
+| 第 10 天 | 與人力資源部了解公司福利、請假及出糧查詢渠道 | HR |
 
-## Week 3 — Contribution
+## 第三星期：參與實際工作
 
-| Day | Task | Category |
-|-----|------|----------|
-| 15 | Ship first small contribution or shadow a project | Team |
-| 17 | Mid-onboarding check-in with manager | Team |
+| 入職日數 | 工作事項 | 類別 |
+|---|---|---|
+| 第 15 天 | 完成首項小型工作，或跟隨同事參與實際專案 | Team |
+| 第 17 天 | 與直屬主管檢視入職進度、工作目標及遇到的困難 | Team |
 
-## Week 4 — Independence
+## 第四星期：檢視首月進度
 
-| Day | Task | Category |
-|-----|------|----------|
-| 22 | Present learnings to team (15-min share) | Team |
-| 30 | Complete 30-day onboarding survey | HR |
-| 30 | Final onboarding review with HR Business Partner | HR |
+| 入職日數 | 工作事項 | 類別 |
+|---|---|---|
+| 第 22 天 | 向團隊分享首月學習成果，時間約 15 分鐘 | Team |
+| 第 30 天 | 完成首月入職問卷 | HR |
+| 第 30 天 | 與人力資源部檢視首月入職安排，確認後續跟進事項 | HR |
+
+## 工程團隊專屬安排
+
+工程團隊新同事須申請 GitHub 組織存取權限，並按專案要求設定開發環境。請與直屬主管確認程式碼審查方式、所需測試環境及培訓負責人；正式環境及發佈權限須另行審批。
+
+## 入職文件提交方式
+
+請透過人力資源部指定的安全渠道提交身份核實、出糧戶口及強積金登記所需資料。表格及系統入口尚未載明，請向人力資源部索取，切勿在公開聊天室張貼身份證副本或銀行資料。
+
+## 入職期間遇到問題
+
+工作內容及優先次序請向直屬主管查詢；人事文件、出糧及福利請聯絡人力資源部；電腦、帳戶及 VPN 問題請電郵至 `it-help@acmecorp.com` 或使用 Slack 的 `#it-support` 頻道。

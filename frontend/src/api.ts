@@ -85,10 +85,10 @@ export async function fetchEvalResults(): Promise<EvalReportBundle> {
     const text = await res.text();
     if (res.status === 404) {
       throw new Error(
-        'Eval API not found. Rebuild containers: docker-compose up -d --build backend frontend',
+        '找不到評估服務，請確認後端已更新並重新啟動。',
       );
     }
-    throw new Error(`Failed to fetch eval results (${res.status}): ${text}`);
+    throw new Error(`未能載入評估結果（${res.status}）。${text}`);
   }
   return res.json();
 }
@@ -118,7 +118,7 @@ export async function resetOnboarding(employeeId: string): Promise<void> {
 export async function fetchCheckins(employeeId?: string): Promise<Checkin[]> {
   const params = employeeId ? `?employee_id=${encodeURIComponent(employeeId)}` : '';
   const res = await fetch(`${API_BASE}/api/admin/checkins${params}`);
-  if (!res.ok) throw new Error('Failed to fetch check-ins');
+  if (!res.ok) throw new Error('未能載入跟進會面，請稍後再試。');
   const data = await res.json();
   return data.checkins;
 }
@@ -156,7 +156,7 @@ export async function streamChat(
       history: history.map((m) => ({ role: m.role, content: m.content })),
     }),
   });
-  if (!res.ok || !res.body) throw new Error('Stream failed');
+  if (!res.ok || !res.body) throw new Error('暫時未能連接入職助理，請稍後再試。');
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

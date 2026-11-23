@@ -12,3 +12,8 @@ chroma/
 evals/results/*
 !evals/results/.gitkeep
 .notes
+
+# Local agent work notes
+/task_plan.md
+/findings.md
+/progress.md

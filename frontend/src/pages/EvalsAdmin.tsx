@@ -2,13 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fetchEvalResults } from '../api';
 import type { EvalReportBundle, EvalScenarioResult } from '../api';
-
-function formatTimestamp(iso: string | undefined): string {
-  if (!iso) return '—';
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-}
+import { TOOL_LABELS, formatHongKongDate } from '../locale';
 
 function PassBadge({ passed }: { passed: boolean }) {
   return (
@@ -17,7 +11,7 @@ function PassBadge({ passed }: { passed: boolean }) {
         passed ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
       }`}
     >
-      {passed ? 'PASS' : 'FAIL'}
+      {passed ? '通過' : '未通過'}
     </span>
   );
 }
@@ -38,7 +32,7 @@ function SummaryCard({
       <div className="rounded-xl border border-dashed border-slate-200 bg-white p-5">
         <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{title}</p>
         <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
-        <p className="mt-3 text-sm italic text-slate-400">No report yet — run evals to generate one.</p>
+        <p className="mt-3 text-sm italic text-slate-400">暫時沒有報告，執行評估後便會顯示。</p>
       </div>
     );
   }
@@ -57,7 +51,7 @@ function SummaryCard({
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
         <div className={`h-full ${barColor}`} style={{ width: `${Math.min(rate, 100)}%` }} />
       </div>
-      <p className="mt-2 text-xs text-slate-400">Updated {formatTimestamp(report.timestamp)}</p>
+      <p className="mt-2 text-xs text-slate-400">更新時間（香港）：{formatHongKongDate(report.timestamp)}</p>
     </div>
   );
 }
@@ -72,8 +66,7 @@ function ScenarioTable({
   if (rows.length === 0) {
     return (
       <p className="px-4 py-8 text-center text-sm italic text-slate-400">
-        No scenario rows in this report. Re-run evals to populate{' '}
-        <code className="text-xs">evals/results/</code>.
+        這份報告暫時沒有測試個案，請重新執行評估。
       </p>
     );
   }
@@ -82,9 +75,9 @@ function ScenarioTable({
     <table className="min-w-full text-left text-sm">
       <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
         <tr>
-          <th className="px-4 py-3 font-medium">Scenario</th>
-          <th className="px-4 py-3 font-medium">Status</th>
-          <th className="px-4 py-3 font-medium">Details</th>
+          <th className="px-4 py-3 font-medium">測試個案</th>
+          <th className="px-4 py-3 font-medium">結果</th>
+          <th className="px-4 py-3 font-medium">詳情</th>
         </tr>
       </thead>
       <tbody>
@@ -103,7 +96,7 @@ function ScenarioTable({
                 <ul className="space-y-1 text-xs">
                   {Object.entries(row.checks).map(([name, ok]) => (
                     <li key={name} className={ok ? 'text-emerald-700' : 'text-red-700'}>
-                      {name}: {ok ? 'ok' : 'failed'}
+                      {name}：{ok ? '通過' : '未通過'}
                     </li>
                   ))}
                 </ul>
@@ -118,7 +111,7 @@ function ScenarioTable({
                 </ul>
               )}
               {row.tool_calls && row.tool_calls.length > 0 && (
-                <p className="mt-1 text-xs text-slate-400">Tools: {row.tool_calls.join(', ')}</p>
+                <p className="mt-1 text-xs text-slate-400">使用工具：{row.tool_calls.map((name) => TOOL_LABELS[name] ?? name).join('、')}</p>
               )}
               {row.response_preview && (
                 <p className="mt-2 text-xs text-slate-500 line-clamp-3">{row.response_preview}</p>
@@ -143,7 +136,7 @@ export default function EvalsAdmin() {
     try {
       setData(await fetchEvalResults());
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load eval results');
+      setError(e instanceof Error ? e.message : '未能載入評估結果，請稍後再試。');
     } finally {
       setLoading(false);
     }
@@ -170,11 +163,10 @@ export default function EvalsAdmin() {
       <header className="border-b border-slate-200 bg-white px-6 py-4">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-indigo-600">Admin</p>
-            <h1 className="text-xl font-semibold text-slate-900">Eval Results</h1>
+            <p className="text-xs font-medium uppercase tracking-wide text-indigo-600">管理頁面</p>
+            <h1 className="text-xl font-semibold text-slate-900">評估結果</h1>
             <p className="text-sm text-slate-500">
-              Golden harness and DeepEval reports from{' '}
-              <code className="rounded bg-slate-100 px-1 text-xs">evals/results/</code>
+              查看自動檢查及 DeepEval 模型評分報告
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -183,13 +175,13 @@ export default function EvalsAdmin() {
               disabled={loading}
               className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
             >
-              {loading ? 'Loading…' : 'Refresh'}
+              {loading ? '載入中…' : '重新整理'}
             </button>
             <Link
               to="/"
               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
             >
-              Back to chat
+              返回對話
             </Link>
           </div>
         </div>
@@ -197,15 +189,14 @@ export default function EvalsAdmin() {
 
       <main className="mx-auto max-w-7xl space-y-6 p-6">
         {loading && !data && (
-          <p className="text-sm text-slate-500">Loading eval reports…</p>
+          <p className="text-sm text-slate-500">正在載入評估報告…</p>
         )}
 
         {error && (
           <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
             <p className="font-medium">{error}</p>
             <p className="mt-1 text-red-600">
-              After pulling new code, run:{' '}
-              <code className="rounded bg-red-100 px-1">docker-compose up -d --build backend frontend</code>
+              請確認後端服務已啟動，然後重新整理頁面。
             </p>
           </div>
         )}
@@ -215,22 +206,20 @@ export default function EvalsAdmin() {
           data.golden.report.total > 0 &&
           goldenRows.length === 0 && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              Golden report has a summary but no scenario rows (stale placeholder). Run{' '}
-              <code className="rounded bg-amber-100 px-1">./scripts/run-evals-docker.sh</code> to
-              regenerate.
+              自動檢查報告只有摘要，沒有個別測試結果，請重新執行評估。
             </div>
           )}
 
         <div className="grid gap-4 md:grid-cols-2">
           <SummaryCard
-            title="Golden harness"
-            subtitle="Deterministic checks (tools, keywords, injection)"
+            title="自動檢查"
+            subtitle="檢查工具使用、關鍵字及提示注入防護"
             report={data?.golden.report ?? null}
             available={Boolean(data?.golden.available)}
           />
           <SummaryCard
             title="DeepEval"
-            subtitle="LLM-as-judge (faithfulness, relevancy, injection rubric)"
+            subtitle="由模型評分：資料忠實度、相關性及提示注入防護"
             report={data?.deepeval.report ?? null}
             available={Boolean(data?.deepeval.available)}
           />
@@ -238,11 +227,11 @@ export default function EvalsAdmin() {
 
         {data && (
           <p className="text-xs text-slate-400">
-            Reading from: {data.results_dir}
+            報告位置：{data.results_dir}
           </p>
         )}
 
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="flex border-b border-slate-200">
             {(['golden', 'deepeval'] as const).map((key) => (
               <button
@@ -254,7 +243,7 @@ export default function EvalsAdmin() {
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                {key === 'golden' ? 'Golden scenarios' : 'DeepEval scenarios'}
+                {key === 'golden' ? '自動檢查個案' : 'DeepEval 評分個案'}
               </button>
             ))}
           </div>
@@ -266,7 +255,7 @@ export default function EvalsAdmin() {
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-          <p className="font-medium text-slate-800">Regenerate reports</p>
+          <p className="font-medium text-slate-800">重新產生報告</p>
           <pre className="mt-2 overflow-x-auto rounded bg-slate-950 p-3 text-xs text-slate-100">
 {`./scripts/run-evals-docker.sh
 ./scripts/run-evals-docker.sh deepeval

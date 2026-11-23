@@ -2,14 +2,16 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
+from functools import lru_cache
 
 import chromadb
-from chromadb.utils import embedding_functions
+from sentence_transformers import SentenceTransformer
 
-from shared.config import CHROMA_PATH, OPENAI_API_KEY, SEED_DATA_DIR
+from shared.config import CHROMA_PATH, DATA_DIR, SEED_DATA_DIR
 
-COLLECTION_NAME = "hr_handbook"
+EMBEDDING_MODEL = "intfloat/multilingual-e5-small"
+# A new collection prevents reusing incompatible OpenAI/MiniLM vectors.
+COLLECTION_NAME = "hr_handbook_multilingual_e5_small_v1"
 _indexed = False
 
 
@@ -25,7 +27,12 @@ def _chunk_markdown(text: str, source: str, chunk_size: int = 500) -> list[dict]
     chunks: list[dict] = []
     for section in sections:
         section = section.strip()
-        if not section:
+        # A title with no policy text can outrank useful cross-language results.
+        has_body = any(
+            line.strip() and not re.match(r"^#{1,6}\s", line)
+            for line in section.splitlines()
+        )
+        if not has_body:
             continue
         for i in range(0, len(section), chunk_size):
             chunk = section[i : i + chunk_size].strip()
@@ -34,13 +41,22 @@ def _chunk_markdown(text: str, source: str, chunk_size: int = 500) -> list[dict]
     return chunks
 
 
-def _embedding_function():
-    if OPENAI_API_KEY:
-        return embedding_functions.OpenAIEmbeddingFunction(
-            api_key=OPENAI_API_KEY,
-            model_name="text-embedding-3-small",
-        )
-    return embedding_functions.DefaultEmbeddingFunction()
+@lru_cache(maxsize=1)
+def _embedding_model():
+    return SentenceTransformer(
+        EMBEDDING_MODEL,
+        cache_folder=str(DATA_DIR / "models"),
+        device="cpu",
+    )
+
+
+def _encode(texts: list[str], prefix: str) -> list[list[float]]:
+    # E5 requires these English prefixes even for Chinese text.
+    return _embedding_model().encode(
+        [f"{prefix}: {text}" for text in texts],
+        normalize_embeddings=True,
+        show_progress_bar=False,
+    ).tolist()
 
 
 def _get_client():
@@ -49,18 +65,11 @@ def _get_client():
 
 def _get_collection():
     client = _get_client()
-    ef = _embedding_function()
-    try:
-        return client.get_or_create_collection(name=COLLECTION_NAME, embedding_function=ef)
-    except ValueError:
-        # Collection was indexed with a different embedding function (e.g. before API key was set).
-        try:
-            client.delete_collection(COLLECTION_NAME)
-        except Exception:
-            pass
-        global _indexed
-        _indexed = False
-        return client.get_or_create_collection(name=COLLECTION_NAME, embedding_function=ef)
+    return client.get_or_create_collection(
+        name=COLLECTION_NAME,
+        embedding_function=None,
+        metadata={"hnsw:space": "cosine"},
+    )
 
 
 def ensure_index() -> None:
@@ -82,8 +91,9 @@ def ensure_index() -> None:
         _indexed = True
         return
 
-    collection.add(
+    collection.upsert(
         ids=[f"chunk-{i}" for i in range(len(all_chunks))],
+        embeddings=_encode([c["content"] for c in all_chunks], "passage"),
         documents=[c["content"] for c in all_chunks],
         metadatas=[{"source": c["source"]} for c in all_chunks],
     )
@@ -93,7 +103,12 @@ def ensure_index() -> None:
 def search_handbook(query: str, top_k: int = 3) -> list[SearchResult]:
     ensure_index()
     collection = _get_collection()
-    results = collection.query(query_texts=[query], n_results=top_k)
+    if collection.count() == 0:
+        return []
+    results = collection.query(
+        query_embeddings=_encode([query], "query"),
+        n_results=min(top_k, collection.count()),
+    )
 
     search_results: list[SearchResult] = []
     if not results["documents"] or not results["documents"][0]:

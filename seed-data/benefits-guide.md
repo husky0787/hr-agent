@@ -1,23 +1,43 @@
-# Acme Corp Benefits Guide
+# Acme Corp 福利及開支報銷指南（香港）
 
-## Health Insurance
+## 醫療保險登記
 
-New employees must enroll in the company health insurance plan within **30 days of their start date**. Coverage begins on the first day of the month following enrollment.
+新同事須於 **入職後 30 天內**辦理公司醫療保險登記。登記表格可向 benefits@acmecorp.com 索取。實際保障生效日期、是否涵蓋試用期、保費分擔及可選計劃，須按香港適用保單向福利負責人確認。
 
-Plans available:
-- **Basic Plan** — employer covers 80% of premiums
-- **Premium Plan** — employer covers 70% of premiums, includes dental and vision
+## 醫療保障及索償
 
-Contact benefits@acmecorp.com for enrollment forms.
+門診、住院、牙科、眼科及家屬保障，以及指定診所、索償文件和提交期限，須按香港適用保單核對；目前未列出保障額或索償系統入口。請向 benefits@acmecorp.com 查詢，不能假設所有診症或牙科費用均獲賠償。
 
-## Retirement
+## 強積金登記及供款紀錄
 
-Acme Corp offers a pension plan with **4% employer match** after 6 months of employment. Enrollment is automatic; you may adjust contribution percentages in the HR portal.
+入職時請與人力資源部核對強積金適用安排、登記程序及所需資料。受託人、登記渠道及供款紀錄查閱方式尚未載明。供款及豁免資格須按香港適用規定及個別情況核對，不能套用其他地區的退休金配對比例。
 
-## Wellness Stipend
+## 報稅文件
 
-Employees receive **€50/month** wellness stipend for gym memberships, mental health apps, or fitness equipment. Submit receipts through Expensify.
+僱員稅務文件的提供時間、領取渠道及資料更正程序尚未載明，請向人力資源部或薪酬負責人查詢。不要將公司文件發出日期與個人報稅截止日期混為一談。
 
-## Parental Leave
+## 產假
 
-Primary caregivers receive **16 weeks paid parental leave**. Secondary caregivers receive **8 weeks paid leave**.
+符合香港《僱傭條例》相關條件的僱員可享有 **連續 14 星期產假**。有薪產假的受僱年期、通知及證明文件要求，須由人力資源部按個別情況核對；不能將產假一律理解為全薪。公司額外產假福利尚未載明。
+法定要求參考：[香港勞工處產假問答](https://www.labour.gov.hk/tc/faq/cap57h_whole.htm)。
+
+## 侍產假
+
+符合香港《僱傭條例》相關條件的僱員可享有 **5 天侍產假**。通知安排、證明文件及侍產假薪酬資格須向人力資源部核對。公司有否額外提供照顧家庭的假期尚未載明。
+法定要求參考：[香港勞工處假期及生育保障說明](https://www.labour.gov.hk/common/Online_exhibition_EO_MWO/htmlbooks/Book2.docx.html)。
+
+## 健康津貼
+
+健康津貼可涉及健身會籍、心理健康應用程式或健身器材，收據透過 Expensify 提交。香港適用的港幣金額、可申領項目及使用期限尚未確認；不能將海外的歐元津貼直接當作香港津貼金額。
+
+## 開支報銷貨幣及收據
+
+香港團隊以 **港幣（HKD）**申報工作開支。申請須附開支日期、金額、工作用途及有效收據。外幣開支另須保留原幣收據及實際付款紀錄，匯率計算方式由財務部確認。
+
+## 差旅、交通及餐飲開支
+
+申報差旅、交通或餐飲開支時，須說明工作用途；如涉及客戶餐飲，須提供業務目的及出席者資料。可報銷項目、金額上限及是否需要預先批准，須向直屬主管及財務部確認，不能假設私人開支可獲報銷。
+
+## 報銷審批及付款
+
+開支先交直屬主管審批，再由財務部處理。一般開支的申請系統入口、提交期限、付款周期及遺失收據的處理程序尚未載明，請向財務部確認；不要自行填入未確認的期限或金額。

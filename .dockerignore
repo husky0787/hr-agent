@@ -1,0 +1,13 @@
+.git
+.env
+.venv
+venv
+data
+**/node_modules
+**/__pycache__
+**/*.pyc
+.pytest_cache
+evals/results
+task_plan.md
+findings.md
+progress.md

@@ -1,21 +1,49 @@
-# Acme Corp Employee Handbook
+# Acme Corp 僱員手冊（香港）
 
-## Remote Work Policy
+## 公司有薪年假
 
-Acme Corp supports a hybrid work model. Employees may work remotely up to **3 days per week**, including Fridays. Remote work must be coordinated with your manager and logged in the HR portal by the prior Wednesday.
+全職僱員每年享有 **25 天有薪年假**，按月累積。25 天屬公司提供的年假安排，並非香港法定年假的統一日數。請向直屬主管申請休假；申請系統入口及提早通知期限須向人力資源部確認。
 
-Core collaboration hours are **10:00–15:00 EET** on remote days. Employees must be available on Slack during these hours.
+## 未放取年假的處理
 
-## Paid Time Off (PTO)
+年假結轉、使用期限及離職時未放取年假的處理方式尚未載明，請向人力資源部確認。不得直接將其他地區的年假作廢安排套用於香港僱員的法定權益。
 
-Full-time employees receive **25 days of PTO per year**, accruing monthly. PTO requests require manager approval at least **5 business days** in advance for absences longer than 2 days.
+## 病假及醫生證明書
 
-Unused PTO above 5 days does not roll over to the next calendar year.
+因病未能上班，應盡快通知直屬主管。疾病津貼資格、已累積的有薪病假及醫生證明書要求，須按香港《僱傭條例》及個別情況核對。公司有否額外提供全薪病假、提交證明的渠道及期限，請向人力資源部確認。
 
-## Code of Conduct
+## 事假及其他假期
 
-All employees must treat colleagues with respect, maintain confidentiality of company information, and report conflicts of interest to HR. Harassment of any kind is grounds for immediate termination.
+事假、婚假及恩恤假是否適用、日數及申請所需文件尚未載明，請向人力資源部查詢，不能自行假設屬有薪假期。
 
-## Office Locations
+## 出糧日期及糧單
 
-Headquarters: Helsinki, Finland. Satellite offices in Stockholm and Berlin.
+每月出糧日期、糧單查閱平台及糧單查詢渠道尚未載明，請向人力資源部或薪酬負責人查詢。
+
+## 更改出糧戶口
+
+如需更改出糧戶口，請先聯絡人力資源部，經指定安全渠道提交資料。所需文件及當月生效的截止日期尚未載明。切勿在公開聊天室傳送銀行戶口資料。
+
+## 工作時間、午膳及遲到
+
+香港團隊的上下班時間、午膳時間、考勤方式及遲到處理程序，應以僱傭合約及團隊安排為準；本手冊尚未列出確實時間。如未能準時上班，請盡快通知直屬主管。
+
+## 加班及補假
+
+加班是否需要預先批准、加班工資或補假安排尚未載明，請向直屬主管及人力資源部確認。不要自行假設加班一定有額外工資或補假。
+
+## 法定假日及公眾假期
+
+香港的法定假日與公眾假期並非完全相同。公司採用的放假日曆、假日上班安排及補假程序，請向人力資源部確認，不應自行假設所有公眾假期均屬公司假期。
+
+## 試用期及轉正
+
+試用期長度、評核日期及確認轉正的方式，應以個別僱傭合約為準。尚未獲確認的僱員，請向直屬主管或人力資源部查詢，不要自行假設試用期為三個月。
+
+## 離職及工作交接
+
+離職通知期、代通知金及最後工作日須按僱傭合約及適用法例核對。辭職時請聯絡直屬主管及人力資源部，確認交接、公司物品歸還及系統權限取消安排。
+
+## 行為守則
+
+僱員須尊重同事、保護公司機密，並向人力資源部申報利益衝突。如遇歧視、騷擾或其他不當行為，請向人力資源部反映，由公司按適用程序處理。

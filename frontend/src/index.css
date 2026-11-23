@@ -4,7 +4,7 @@
 @variant dark (&:where(.dark, .dark *));
 
 :root {
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang HK', 'Microsoft JhengHei', 'Noto Sans TC', sans-serif;
 }
 
 body {

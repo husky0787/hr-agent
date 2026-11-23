@@ -11,6 +11,7 @@ import {
 import type { AgentEvent, ChatMessage, DemoEmployee, OnboardingStatus } from '../api';
 import ChatMarkdown from '../components/ChatMarkdown';
 import { useTheme } from '../ThemeContext';
+import { AGENT_LABELS, CATEGORY_LABELS, SOURCE_LABELS, TOOL_LABELS, agentDescription } from '../locale';
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
 
@@ -86,7 +87,7 @@ function ThinkingDots() {
 }
 
 function ToolCallBadge({ name }: { name: string }) {
-  const label = name.replace(/_tool$/, '').replace(/_/g, ' ');
+  const label = TOOL_LABELS[name] ?? '處理入職事項';
   return (
     <motion.span
       initial={{ opacity: 0, scale: 0.85 }}
@@ -107,8 +108,9 @@ function CitationChip({ text }: { text: string }) {
       animate={{ opacity: 1, scale: 1 }}
       className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium
         bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400 border border-violet-200/60 dark:border-violet-800/50"
+      title={text}
     >
-      {text}
+      {SOURCE_LABELS[text] ?? text}
     </motion.span>
   );
 }
@@ -166,8 +168,8 @@ function AgentFlowPanel({ entries }: { entries: AgentEvent[] }) {
       className="overflow-hidden"
     >
       <div className="px-4 pt-4 pb-3 border-t border-zinc-200 dark:border-zinc-800">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-600 mb-3">
-          Agent flow
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-400 mb-3">
+          處理進度
         </p>
         <div className="space-y-0 max-h-44 overflow-y-auto">
           {entries.map((entry, i) => (
@@ -199,11 +201,11 @@ function AgentFlowPanel({ entries }: { entries: AgentEvent[] }) {
               <div className="pb-3 min-w-0">
                 <p className="text-xs leading-tight font-mono">
                   <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-                    {entry.agent.charAt(0).toUpperCase() + entry.agent.slice(1)}
+                    {AGENT_LABELS[entry.agent] ?? '入職助理'}
                   </span>
-                  <span className="text-zinc-400 dark:text-zinc-600"> · </span>
+                  <span className="text-zinc-400 dark:text-zinc-400"> · </span>
                   <span className="text-zinc-500 dark:text-zinc-400 wrap-break-word">
-                    {entry.detail}
+                    {agentDescription(entry)}
                   </span>
                 </p>
               </div>
@@ -263,12 +265,12 @@ function OnboardingProgress({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Progress</h2>
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">入職進度</h2>
         <button
           onClick={onReset}
-          className="text-xs text-zinc-400 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-400 transition-colors"
+          className="text-xs text-zinc-400 dark:text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-400 transition-colors"
         >
-          reset
+          重設
         </button>
       </div>
 
@@ -278,16 +280,16 @@ function OnboardingProgress({
             <CircularProgress percent={status.completion_percent} />
             <div>
               <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                {status.completed_tasks} / {status.total_tasks}
+                已完成 {status.completed_tasks} / {status.total_tasks} 項
               </p>
-              <p className="text-xs text-zinc-400 dark:text-zinc-500">tasks done</p>
+              <p className="text-xs text-zinc-400 dark:text-zinc-500">入職待辦事項</p>
             </div>
           </div>
 
           <div className="space-y-1.5 max-h-[calc(100vh-420px)] overflow-y-auto -mx-1 px-1">
             {status.tasks.length === 0 && (
-              <p className="text-xs text-zinc-400 dark:text-zinc-600 italic py-2">
-                No tasks yet — ask what to do this week!
+              <p className="text-xs text-zinc-400 dark:text-zinc-400 italic py-2">
+                暫時沒有待辦事項。你可以問：「入職第一星期要做甚麼？」
               </p>
             )}
             <AnimatePresence>
@@ -313,7 +315,7 @@ function OnboardingProgress({
                   <div className="flex-1 min-w-0">
                     <p className={`text-xs leading-relaxed ${
                       task.status === 'completed'
-                        ? 'line-through text-zinc-400 dark:text-zinc-600'
+                        ? 'line-through text-zinc-400 dark:text-zinc-400'
                         : 'text-zinc-700 dark:text-zinc-300'
                     }`}>
                       {task.title}
@@ -322,10 +324,10 @@ function OnboardingProgress({
                       <span className={`rounded px-1.5 py-px text-[10px] font-medium ${
                         CATEGORY_STYLES[task.category] ?? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'
                       }`}>
-                        {task.category}
+                        {CATEGORY_LABELS[task.category] ?? task.category}
                       </span>
-                      <span className="text-[10px] text-zinc-400 dark:text-zinc-600">
-                        Day {task.due_day}
+                      <span className="text-[10px] text-zinc-400 dark:text-zinc-400">
+                        第 {task.due_day} 天
                       </span>
                     </div>
                   </div>
@@ -385,9 +387,9 @@ function ChatMessageBubble({
 // ─── Suggestions ──────────────────────────────────────────────────────────────
 
 const SUGGESTIONS = [
-  "What's the remote work policy?",
-  'I just started today — what should I do this week?',
-  'When do I need to enroll in health insurance?',
+  '每年有多少天有薪年假？',
+  '我今日入職，第一星期要做甚麼？',
+  '入職後幾時要登記醫療保險？',
 ];
 
 function EmptyState({ onSuggest }: { onSuggest: (s: string) => void }) {
@@ -404,7 +406,7 @@ function EmptyState({ onSuggest }: { onSuggest: (s: string) => void }) {
           </svg>
         </div>
         <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-xs">
-          Ask about policies, benefits, or IT setup — or tell me you just started.
+          有關請假、福利、IT 設定或入職安排，都可以在這裏查詢。
         </p>
       </div>
       <div className="flex flex-col gap-2 w-full max-w-sm">
@@ -512,7 +514,8 @@ export default function ChatPage() {
           assistantContent = data as string;
         }
         if (event === 'error') {
-          throw new Error((data as { message: string }).message);
+          console.error('Chat response failed:', data);
+          throw new Error('助理暫時未能完成回覆，請稍後再試。');
         }
       });
 
@@ -527,7 +530,8 @@ export default function ChatPage() {
 
       await refreshStatus(employee.id);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong');
+      setError(e instanceof Error && e.message !== 'Failed to fetch'
+        ? e.message : '未能連接服務，請檢查連線後再試。');
     } finally {
       setLoading(false);
     }
@@ -558,8 +562,8 @@ export default function ChatPage() {
     <div className="h-screen flex flex-col bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 overflow-hidden">
 
       {/* ── Header ── */}
-      <header className="shrink-0 h-14 flex items-center justify-between px-5 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
+      <header className="shrink-0 h-14 flex items-center justify-between px-4 sm:px-5 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
+        <div className="flex items-center gap-2 sm:gap-3">
           <div className="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center shrink-0">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2a10 10 0 1 0 10 10" />
@@ -569,19 +573,19 @@ export default function ChatPage() {
           <div>
             <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">OnboardAI</span>
             {employee && (
-              <span className="hidden sm:inline text-xs text-zinc-400 dark:text-zinc-600 ml-2">
-                {employee.name} · {employee.role}
+              <span className="hidden sm:inline text-xs text-zinc-400 dark:text-zinc-400 ml-2">
+                {employee.name} · {employee.role === 'Software Engineer' ? '軟件工程師' : employee.role} · 入職第 {employee.start_day} 天
               </span>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Link to="/admin/checkins" className="hidden sm:block text-xs text-zinc-400 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-400 transition-colors">
-            Check-ins
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Link to="/admin/checkins" className="whitespace-nowrap text-xs text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">
+            跟進會面
           </Link>
-          <Link to="/admin/evals" className="hidden sm:block text-xs text-zinc-400 dark:text-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-400 transition-colors">
-            Evals
+          <Link to="/admin/evals" className="whitespace-nowrap text-xs text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">
+            評估結果
           </Link>
           <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-800" />
           <motion.button
@@ -589,7 +593,7 @@ export default function ChatPage() {
             whileTap={{ scale: 0.88 }}
             className="w-8 h-8 rounded-lg flex items-center justify-center
               text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-            aria-label="Toggle theme"
+            aria-label={theme === 'dark' ? '轉用淺色模式' : '轉用深色模式'}
           >
             <AnimatePresence mode="wait">
               <motion.span
@@ -605,6 +609,15 @@ export default function ChatPage() {
           </motion.button>
         </div>
       </header>
+
+      <details className="lg:hidden shrink-0 max-h-[40vh] overflow-y-auto border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-2">
+        <summary className="cursor-pointer text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          入職進度 · 已完成 {status?.completion_percent ?? 0}%
+        </summary>
+        <div className="py-3">
+          <OnboardingProgress status={status} onComplete={handleComplete} onReset={handleReset} />
+        </div>
+      </details>
 
       {/* ── Main ── */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
@@ -681,15 +694,16 @@ export default function ChatPage() {
                   e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     handleSend();
                   }
                 }}
-                placeholder="Ask about onboarding or company policies…"
+                placeholder="輸入有關入職安排或公司政策的問題…"
+                aria-label="輸入問題"
                 disabled={loading}
                 className="flex-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl px-4 py-2.5 text-sm
-                  placeholder:text-zinc-400 dark:placeholder:text-zinc-600
+                  placeholder:text-zinc-500 dark:placeholder:text-zinc-400
                   text-zinc-900 dark:text-zinc-100
                   border border-transparent focus:border-violet-400 dark:focus:border-violet-600
                   focus:outline-none transition-colors resize-none overflow-y-auto leading-relaxed"
@@ -697,6 +711,7 @@ export default function ChatPage() {
               />
               <motion.button
                 type="submit"
+                aria-label={loading ? '正在回覆' : '傳送訊息'}
                 disabled={loading || !input.trim()}
                 whileTap={{ scale: 0.9 }}
                 className="shrink-0 w-9 h-9 rounded-xl bg-violet-600 hover:bg-violet-700
