@@ -1,342 +1,272 @@
-# OnboardAI — Autonomous HR Onboarding Agent
+# OnboardAI — 香港團隊入職助理
 
-An autonomous HR onboarding agent that answers policy questions with citations, proactively creates 30-day onboarding plans, tracks task completion, and schedules check-ins — with an automated eval suite.
+以香港繁體中文查詢公司政策、福利及 IT 設定，建立首 30 天入職待辦事項，並安排主管或人力資源部跟進會面。回答會引用知識文件，介面支援串流回覆及入職進度追蹤。
 
-**Portfolio v2** — evolution of a production RAG system deployed at [hr.433-cloud.com](https://hr.433-cloud.com).
+## 目前功能
 
-Built for the [Digital Workforce Senior AI Agent Developer](https://careers.digitalworkforce.eu/jobs/7932451-senior-ai-agent-developer-to-our-office-in-helsinki/) role.
+- **四個 Agent 角色**：流程協調、文件查詢、入職安排及回覆整理；共用所設定的聊天模型，按需要依次執行。
+- **四項工具**：搜尋公司文件、建立待辦事項、列出待辦事項及安排跟進會面。
+- **本地中英文檢索**：使用 `intfloat/multilingual-e5-small`，在 CPU 上產生向量，以 Chroma 儲存及搜尋。
+- **香港繁體中文介面**：聊天提示、文件引用、處理進度、跟進會面及評估頁面；日期按香港時區顯示。
+- **PostgreSQL**：儲存入職待辦事項、完成狀態及跟進會面。
+- **MCP 伺服器**：提供相同的人事工具供其他 MCP 用戶端使用。
+- **提示注入防護**：輸入檢查、輸出檢查、寫入工具限制及伺服器端參數驗證。
 
-## Problem
-
-New hires ask the same 50 HR questions. HR teams manually track onboarding tasks across IT, benefits, and team integration. v1 solved Q&A with RAG; **v2 adds autonomous workflow execution** — the gap between a chatbot and an enterprise agent.
-
-## v1 → v2 Evolution
-
-| v1 (Deployed) | v2 (This repo) |
-|---|---|
-| Django + LlamaIndex RAG API | FastAPI + LangGraph agent |
-| Passive document Q&A | Multi-tool autonomous agent |
-| Streaming chat only | Chat + task tracking + check-ins |
-| No evals | 28-scenario automated eval suite |
-| Backend only | Python + React full stack |
-| — | Custom MCP server for HR tools |
-
-## Architecture
+## 架構
 
 ```mermaid
 flowchart LR
-  subgraph frontend [React Frontend]
-    Chat[Chat UI]
-    Progress[Onboarding Progress]
-  end
-  subgraph backend [FastAPI Backend]
-    API[REST + SSE API]
-    Agent[LangGraph Agent]
-  end
-  subgraph tools [HR Tools]
-    MCP[MCP Server]
-    RAG[Chroma RAG]
-    Tasks[Postgres Tasks]
-  end
-  Chat --> API
-  Progress --> API
-  API --> Agent
-  Agent --> RAG
-  Agent --> Tasks
-  MCP --> RAG
-  MCP --> Tasks
+    UI[React 前端] --> API[FastAPI REST / SSE]
+    API --> Router[流程協調]
+    Router --> Research[文件查詢]
+    Router --> Workflow[入職安排]
+    Research --> RAG[本地 E5 + Chroma]
+    Workflow --> DB[(PostgreSQL)]
+    Research --> Answer[回覆整理]
+    Workflow --> Answer
+    Answer --> UI
+    MCP[MCP 伺服器] --> RAG
+    MCP --> DB
 ```
 
-## Features
+文件查詢負責 RAG 檢索；入職安排負責資料庫操作；回覆整理根據取得的資料生成答案。流程協調會決定需要哪些角色，不是每次都執行全部角色。
 
-- **LangGraph ReAct agent** with 4 tools: handbook search, task creation, task listing, check-in scheduling
-- **Custom MCP server** exposing the same HR tools for Cursor/Claude integration
-- **Chroma RAG** over seed HR documents with source citations
-- **Local multilingual embeddings** — `intfloat/multilingual-e5-small` for Chinese and English retrieval, independent of the chat API provider
-- **React UI** — streaming chat, citation chips, tool-call indicators, onboarding progress sidebar
-- **Eval harness** — 28 golden scenarios testing retrieval, tool use, answer quality, and prompt-injection resistance
-- **Prompt-injection defenses** — input sandboxing, output guardrails, write-tool blocking, server-side tool validation
+## 環境設定
 
-## Security
+首次下載：
 
-OnboardAI uses layered defenses against prompt injection — full write-up in [docs/SECURITY.md](docs/SECURITY.md).
+```powershell
+git clone https://github.com/husky0787/hr-agent.git
+cd hr-agent
+Copy-Item .env.example .env
+```
 
-| Layer | What it does |
+已有 `.env` 時請保留，避免覆蓋密鑰。編輯 `.env`：
+
+```dotenv
+OPENAI_API_KEY=填入你的服務密鑰
+OPENAI_BASE_URL=https://share.transmd.cloud/v1
+OPENAI_MODEL=gpt-6.1-sol
+OPENAI_ACTOR_AUTHORIZATION=local-image-extension
+
+POSTGRES_USER=onboardai
+POSTGRES_PASSWORD=onboardai
+POSTGRES_DB=onboardai
+DATABASE_URL=postgresql://onboardai:onboardai@localhost:5432/onboardai
+```
+
+以上聊天設定對應目前使用的代理。使用其他供應商時，請修改地址、模型及所需請求標頭；不需要自訂標頭時，可將 `OPENAI_ACTOR_AUTHORIZATION` 留空。
+
+聊天服務須支援 **Responses API、工具呼叫及結構化輸出**。程式會傳送 `store=False`。API Key 供聊天使用；本地 embedding 不需要 API Key。`review_model`、`wire_api` 及 Codex 功能開關不會由本專案讀取。
+
+## 不用 Docker 啟動：Windows / PowerShell
+
+需要 Python 3.11 或以上、Node.js（本機已使用 24.12.0 驗證）及 PostgreSQL 16。前端和後端分開在兩個終端機執行。
+
+### 1. 首次建立資料庫
+
+安裝 PostgreSQL 16，保留連接埠 `5432`，並記下安裝時設定的 `postgres` 管理員密碼：
+
+```powershell
+winget install --exact --id PostgreSQL.PostgreSQL.16 --interactive
+```
+
+安裝服務啟動後，建立與上面 `.env` 對應的帳戶及空白資料庫。以下只需首次執行；命令會要求輸入管理員密碼：
+
+```powershell
+& "C:/Program Files/PostgreSQL/16/bin/psql.exe" -h localhost -U postgres -c "CREATE USER onboardai WITH PASSWORD 'onboardai';"
+& "C:/Program Files/PostgreSQL/16/bin/psql.exe" -h localhost -U postgres -c "CREATE DATABASE onboardai OWNER onboardai;"
+```
+
+如已自行建立帳戶或更改密碼，請同步修改 `.env`。後端啟動時會自動建立業務資料表。
+
+### 2. 首次安裝後端依賴
+
+在專案根目錄執行；已有虛擬環境時毋須重新建立：
+
+```powershell
+python -m venv .venv
+./.venv/Scripts/python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+./.venv/Scripts/python.exe -m pip install -r backend/requirements.txt
+```
+
+### 3. 啟動後端
+
+在第一個 PowerShell 視窗、專案根目錄執行：
+
+```powershell
+$env:PYTHONPATH = "$PWD;$PWD/backend"
+./.venv/Scripts/python.exe -m uvicorn app.main:app --app-dir backend --env-file .env --host 127.0.0.1 --port 8000
+```
+
+### 4. 啟動前端
+
+在第二個 PowerShell 視窗、專案根目錄執行：
+
+```powershell
+cd frontend
+npm.cmd ci
+npm.cmd run dev
+```
+
+`npm.cmd ci` 只在首次安裝或依賴更新後執行。日後啟動只需確保 PostgreSQL 正在運行，再分別執行後端命令及 `npm.cmd run dev`。前後端可用各自終端機的 `Ctrl+C` 停止；PostgreSQL 是獨立的背景服務。
+
+| 頁面 | 地址 |
 |---|---|
-| **Pure-attack early exit** | Skips agent graph when message is injection-only (no HR question) |
-| Input wrapping | User messages sandboxed in `<user_input>` tags |
-| Injection scan | Regex patterns flag override attempts in message + history |
-| Security prompts | Anti-injection rules on every agent system prompt |
-| Output guardrail | Blocks hijacked canned responses and prompt leaks |
-| Tool authorization | Write tools blocked when injection suspected; max 5 tasks/message |
-| Server validation | Task title/topic length, due-day range enforced in Python |
+| 入職助理 | http://localhost:5173 |
+| API 文件 | http://localhost:8000/docs |
+| 健康檢查 | http://localhost:8000/health |
+| 跟進會面 | http://localhost:5173/admin/checkins |
+| 評估結果 | http://localhost:5173/admin/evals |
 
-Run injection evals: `./scripts/run-evals-docker.sh --filter prompt_injection` — see [docs/EVALS.md](docs/EVALS.md).
+可嘗試：「每年有多少天有薪年假？」、「我今日入職，第一星期要做甚麼？」或「香港團隊應以甚麼貨幣申報工作開支？」。目前使用預設僱員 Alex Chen，並未接駁真實僱員登入系統。
 
-## Quick Start
+## 使用 Docker Compose 啟動
 
-### Prerequisites
+Docker 是另一種啟動方式，並非必要。設定好 `.env` 並啟動 Docker Desktop 後，在專案根目錄執行：
 
-- Docker & Docker Compose
-- OpenAI API key
-
-### Run with Docker
-
-```bash
-cp .env.example .env
-# Edit .env and set OPENAI_API_KEY
-
-docker-compose up --build
+```powershell
+docker compose up --build -d
+docker compose ps
+docker compose logs -f backend
 ```
 
-- Frontend: http://localhost:5173
-- API docs: http://localhost:8000/docs
+Compose 會啟動 PostgreSQL、後端、前端、MCP 及 pgAdmin；前端仍在 5173，API 在 8000，pgAdmin 在 8080。容器內的資料庫地址由 Compose 自動改為 `postgres`。
 
-### Run locally (development)
+不要同時讓本機服務和 Compose 佔用 5432、8000 或 5173。兩種方式各自使用的 PostgreSQL 資料儲存位置不同。
 
-**Backend:**
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r backend/requirements.txt
-export PYTHONPATH="$(pwd):$(pwd)/backend"
-export OPENAI_API_KEY=sk-...
-uvicorn app.main:app --reload --app-dir backend
+停止容器：
+
+```powershell
+docker compose down
 ```
 
-**Frontend:**
-```bash
-cd frontend && npm install && npm run dev
-```
+## RAG 知識文件及模型
 
-**MCP Server:**
-```bash
-pip install -r mcp-server/requirements.txt
-export PYTHONPATH="$(pwd)"
-python mcp-server/server.py
-```
+核心程式是 [shared/rag.py](shared/rag.py)。目前讀取 `seed-data/` 目錄第一層的 UTF-8 Markdown（`.md`）文件：
 
-## Eval Suite
-
-> Full documentation: [docs/EVALS.md](docs/EVALS.md)
-
-### Docker (recommended)
-
-Uses the same backend image and Postgres as the app. Results land on your machine at `evals/results/latest.json`.
-
-```bash
-# Make sure .env has OPENAI_API_KEY, then:
-
-# All 28 scenarios (~5–8 min)
-./scripts/run-evals-docker.sh
-
-# Injection scenarios only (~1 min)
-./scripts/run-evals-docker.sh --filter prompt_injection
-
-# One scenario by id substring
-./scripts/run-evals-docker.sh --filter remote_policy
-```
-
-**Manual equivalent** (without the helper script):
-
-```bash
-docker-compose up -d postgres
-docker-compose --profile evals run --rm evals
-docker-compose --profile evals run --rm evals --filter prompt_injection
-```
-
-### View results
-
-**Terminal summary** — printed automatically by `./scripts/run-evals-docker.sh`.
-
-**Full JSON report:**
-
-```bash
-cat evals/results/latest.json
-```
-
-Or open **Admin → Evals** in the app at `/admin/evals`.
-
-| Field | Meaning |
+| 文件 | 內容 |
 |---|---|
-| `passed` | `true` / `false` |
-| `checks` | Which assertions passed (`contains`, `not_contains`, `tools_called`, …) |
-| `response_preview` | First 300 chars of the agent reply |
-| `tool_calls` | Tools the agent invoked |
-| `error` | Exception message if the run crashed |
+| [employee-handbook.md](seed-data/employee-handbook.md) | 年假、病假、出糧、工作安排、試用期及離職 |
+| [benefits-guide.md](seed-data/benefits-guide.md) | 醫療保險、強積金、稅務文件、產假、侍產假及開支報銷 |
+| [it-setup.md](seed-data/it-setup.md) | 電腦、VPN、Slack、系統權限及資訊保安 |
+| [onboarding-checklist.md](seed-data/onboarding-checklist.md) | 首 30 天入職安排及工程團隊工作事項 |
 
-**Pretty-print one failed scenario:**
+各段應提供完整資料，不能只寫「請參閱另一個檔案」並預期 RAG 自動追讀。PDF、Word、Excel 及 TXT 尚未有直接匯入功能。未有確實公司資料的項目會註明尚待確認，助理應如實說明資料不足。
 
-```bash
-python3 -c "
-import json
-r = json.load(open('evals/results/latest.json'))
-for row in r['results']:
-    if not row.get('passed'):
-        print(json.dumps(row, indent=2))
-"
+首次檢索會從 Hugging Face 下載 `intfloat/multilingual-e5-small`，權重約 471 MB，另有 tokenizer 及執行依賴。模型快取位於 `data/models/`，向量索引位於 `data/chroma/`；Compose 會透過既有 `./data` 掛載保留快取。
+
+文件與問題會分別加上 E5 所需的 `passage: ` 及 `query: ` 前綴，產生正規化的 384 維向量。檢索預設返回前三個片段。混合語言語料中，相關的跨語言片段未必排第一。
+
+### 更新知識文件後
+
+目前不會自動偵測文件變動。新增、修改或刪除文件後，須更新向量索引；單純重啟不會更新已有內容。
+
+先停止使用相同 Chroma 目錄的後端及 MCP 程序，再於專案根目錄執行以下命令。它只重建目前 E5 集合，不會刪除 PostgreSQL 的待辦事項或會面：
+
+```powershell
+@'
+from shared import rag
+
+client = rag._get_client()
+names = [collection.name for collection in client.list_collections()]
+if rag.COLLECTION_NAME in names:
+    client.delete_collection(rag.COLLECTION_NAME)
+rag.ensure_index()
+print("Indexed chunks:", rag._get_collection().count())
+'@ | ./.venv/Scripts/python.exe -
 ```
 
-### Local Python (without Docker)
+完成後重新啟動後端及所需的 MCP 程序。
 
-```bash
-export PYTHONPATH="$(pwd):$(pwd)/backend"
-export $(grep -v '^#' .env | xargs)
-python evals/run_evals.py
-python evals/run_evals.py --filter prompt_injection
+## 測試及評估
+
+### 前端導覽回歸測試
+
+在前端目錄執行，測試會模擬 API 回覆，不會呼叫外部模型：
+
+```powershell
+cd frontend
+npm.cmd ci
+npm.cmd test
 ```
 
-Results are saved to `evals/results/latest.json`.
+目前涵蓋切換管理頁後保留聊天內容、引用及後續問題上下文、未傳送草稿，以及背景中的回覆。聊天狀態保留於同一分頁的應用程式記憶體，重新整理或關閉分頁後仍會清空。
 
-### DeepEval (LLM-as-judge)
+### 本地檢索測試
 
-[DeepEval](https://github.com/confident-ai/deepeval) adds semantic metrics on top of the golden harness:
+已驗證的檢索測試共有 **17 項**，涵蓋前綴、引用原文、索引重用、中英文及跨語言檢索，以及香港年假、出糧、報銷、強積金和產假查詢。這是檢索測試數目，不代表所有模型回答的準確率。
 
-| Scenario type | Metrics |
-|---|---|
-| RAG / handbook (`cites_source`) | Faithfulness + Answer Relevancy |
-| Workflow (tasks, check-ins) | Answer Relevancy |
-| `prompt_injection_*` | GEval injection-resistance rubric |
+在專案根目錄執行：
 
-**Docker:**
-
-```bash
-# All scenarios (~5–10 min, uses extra judge API calls)
-./scripts/run-evals-docker.sh deepeval
-
-# Injection only
-./scripts/run-evals-docker.sh deepeval --filter prompt_injection
+```powershell
+./.venv/Scripts/python.exe -m pip install pytest
+$env:RUN_EMBEDDING_INTEGRATION = "1"
+./.venv/Scripts/python.exe -m pytest tests/test_rag.py tests/test_rag_integration.py -q
 ```
 
-Results: `evals/results/deepeval-latest.json`
+首次需要下載模型；已完整下載後，可設定 `$env:HF_HUB_OFFLINE = "1"` 驗證離線檢索。這組測試不需要聊天 API Key、PostgreSQL 或 Docker，測試索引會使用臨時目錄。
 
-**Local:**
+### 聊天及工作流評估
 
-```bash
-pip install -r evals/requirements.txt
-export PYTHONPATH="$(pwd):$(pwd)/backend"
-export $(grep -v '^#' .env | xargs)
-python evals/run_deepeval.py
-python evals/run_deepeval.py --filter remote_policy
+`evals/` 包含原有 Golden harness 及 DeepEval 評分程式；報告可在「評估結果」頁查看。**原有 28 個 Golden 個案仍包含海外政策及已移除的在家工作問題，尚未全面遷移為香港版**；舊的 22/28 成績不能作為目前香港版本的成績。
+
+相關命令與歷史背景見 [docs/EVALS.md](docs/EVALS.md)。執行聊天或模型評分會使用所設定供應商的 API；DeepEval 評分模型可能需要另行設定。
+
+## 在另一部電腦使用及資料備份
+
+| 資料 | 是否在 GitHub | 搬移方式 |
+|---|---|---|
+| 程式碼、知識文件、依賴清單 | 是 | Clone 倉庫 |
+| `.env` 及密鑰 | 否 | 私下保存或在新電腦重新設定 |
+| PostgreSQL 待辦事項及跟進會面 | 否 | 如需保留，匯出及還原資料庫 |
+| `data/models/` | 否 | 可複製快取，或重新下載 |
+| Chroma 向量索引 | 否 | 可由知識文件重新建立 |
+| 聊天紀錄 | 否 | 同一分頁內切換管理頁可保留；重新整理或關閉分頁後不會保留 |
+
+在 Windows 備份本機 PostgreSQL；命令會要求輸入專案資料庫帳戶密碼：
+
+```powershell
+New-Item -ItemType Directory -Force data | Out-Null
+& "C:/Program Files/PostgreSQL/16/bin/pg_dump.exe" -h localhost -U onboardai -d onboardai -Fc -f data/onboardai.backup
 ```
 
-**Pytest integration:**
+在新電腦先建立空白 `onboardai` 資料庫，再於啟動應用程式前還原：
 
-```bash
-deepeval test run evals/test_deepeval.py
-DEEPEVAL_FILTER=prompt_injection deepeval test run evals/test_deepeval.py
+```powershell
+& "C:/Program Files/PostgreSQL/16/bin/pg_restore.exe" -h localhost -U onboardai -d onboardai --no-owner data/onboardai.backup
 ```
 
-Optional env vars: `DEEPEVAL_THRESHOLD` (default `0.7`), `DEEPEVAL_MODEL` (default `gpt-4o-mini`).
+新電腦的 PostgreSQL 管理員密碼以該機安裝設定為準。`.venv`、`node_modules` 及執行紀錄不用搬移；應在新環境重新安裝依賴。
 
-### Eval Scenarios (28)
+## 專案結構
 
-| Scenario | Tests |
-|---|---|
-| remote_policy | Handbook citation + remote work keywords |
-| pto_policy | 25 PTO days from handbook |
-| proactive_tasks | Auto-creates 3+ onboarding tasks |
-| benefits_deadline | 30-day insurance enrollment |
-| vpn_setup | IT setup doc citation |
-| slack_channels | Slack channel info |
-| wellness_stipend | €50 wellness benefit |
-| security_requirements | 2FA within 48 hours |
-| schedule_checkin | Check-in tool invocation |
-| list_tasks | Task listing tool |
-| code_of_conduct | Harassment policy |
-| parental_leave | 16 weeks leave |
-| pension_match | 4% employer pension match |
-| secondary_parental_leave | 8 weeks secondary caregiver leave |
-| remote_days_limit | 3 remote days per week |
-| headquarters_location | Helsinki HQ |
-| it_helpdesk | IT support contact |
-| github_access | Developer GitHub onboarding |
-| disk_encryption_deadline | 24-hour encryption requirement |
-| remote_policy_and_first_week | Research + workflow in one question |
-| premium_health_plan | Premium plan dental coverage |
-| onboarding_buddy | Day 1 buddy meeting |
-| prompt_injection_fixed_response | Blocks canned "service down" hijack |
-| prompt_injection_hacker_down_message | Blocks hacker + "sorry we are down" variant |
-| prompt_injection_ignore_instructions | Blocks role-override attacks |
-| prompt_injection_reveal_prompt | Blocks system-prompt exfiltration |
-| prompt_injection_task_spam | Blocks mass task creation via injection |
-| prompt_injection_mixed_pto | Answers PTO despite injection suffix |
-
-**Baseline:** 22/28 golden scenarios pass (78.6%). All injection scenarios pass; 6 RAG/workflow cases need agent improvements — see [docs/EVALS.md](docs/EVALS.md#current-baseline-golden-harness).
-
-## 2-Minute Demo Script (Interview)
-
-1. Open http://localhost:5173 — **Alex Chen, Software Engineer, Day 1** is pre-loaded
-2. Ask: *"What's the remote work policy?"* → agent cites `employee-handbook.md`
-3. Ask: *"I just started, what should I do this week?"* → agent creates 4–5 tasks, progress bar updates
-4. Show eval output: `./scripts/run-evals-docker.sh --filter prompt_injection`
-5. Close: *"v1 was RAG Q&A I deployed for a client. v2 adds autonomous workflow execution."*
-
-## Project Structure
-
-```
-hr-onboarding/
-├── backend/           # FastAPI + LangGraph agent
-├── docs/              # Security, evals, deploy, multi-agent, run guides
-├── mcp-server/        # Python MCP HR tools
-├── frontend/          # React + Vite + Tailwind
-├── evals/             # Golden scenarios + DeepEval runners
-├── shared/            # RAG, tasks, DB (used by backend + MCP)
-├── seed-data/         # HR handbook, benefits, IT docs
+```text
+hr-agent/
+├── backend/           # FastAPI、LangGraph 及人事工具
+├── frontend/          # React、Vite、香港繁體中文介面
+├── shared/            # RAG、資料庫及共用邏輯
+├── seed-data/         # 香港知識文件
+├── mcp-server/        # MCP 工具伺服器
+├── tests/             # 本地及真實模型檢索測試
+├── evals/             # Golden / DeepEval 程式及歷史個案
+├── docs/              # 執行、安全、評估及部署說明
+├── data/              # 本機快取、向量索引及紀錄，不提交 Git
 └── docker-compose.yml
 ```
 
-## Production Roadmap
+## 安全及部署狀態
 
-- [ ] pgvector instead of embedded Chroma for multi-tenant scale
-- [ ] Real Slack / HRIS MCP integrations
-- [ ] OAuth + multi-org tenancy
-- [ ] PDF upload pipeline for custom handbooks
-- [x] DeepEval LLM-as-judge for faithfulness and injection scoring
-- [ ] OpenTelemetry tracing for agent observability
+目前具備多層提示注入防護，包括輸入包裝、規則檢查、安全提示、輸出檢查、可疑請求的寫入限制，以及每次訊息最多建立 5 個事項。詳見 [docs/SECURITY.md](docs/SECURITY.md)。
 
-### Future deployment hardening
+目前仍使用預設僱員，未完成正式身份驗證、多租戶隔離及管理頁授權。公開部署前須處理身份驗證、CORS、管理操作授權及速率限制。部署設定及既有 VPS 工作流程見 [docs/DEPLOY-VPS.md](docs/DEPLOY-VPS.md)；不能以本機已驗證的結果推斷遠端部署狀態。
 
-Required before exposing a public production instance:
+## 專案背景及後續方向
 
-- [ ] **Authentication** — bind `employee_id` to logged-in user (JWT/session); reject cross-tenant access
-- [ ] **CORS lockdown** — restrict `allow_origins` to the frontend domain (replace `*`)
-- [ ] **Admin route protection** — require API key or admin role on `/api/admin/*` and `/api/onboarding/{id}/reset`
-- [ ] **Rate limiting** — per-IP and per-user limits on `/api/chat` (e.g. `slowapi` or reverse-proxy rules)
-- [ ] **Edge access control** — Cloudflare Access, VPN, or IP allowlist for demo/staging deployments
-- [ ] **LLM injection classifier** — secondary model call to flag adversarial input before agent execution
+本專案由 Django + LlamaIndex 文件問答版本演進，加入 FastAPI、LangGraph 多角色協作、React 全端介面及 MCP 工具。
 
-## Deploy
+後續方向包括文件變動自動索引、PDF 匯入、正式僱員登入、HRIS / Slack 整合、pgvector 及香港版完整 Golden 評估個案。
 
-### VPS (production demo)
+## 授權
 
-Live at https://hr.xpotify.cc · API https://hr-api.xpotify.cc · Eval dashboard `/admin/evals`
-
-Pushes to `main` that touch `backend/`, `frontend/`, `evals/`, `shared/`, or `deploy/vps/` trigger GitHub Actions deploy to Hetzner. After each deploy, **golden evals run automatically** and populate the admin dashboard (results are gitignored, server-only).
-
-Full guide: [docs/DEPLOY-VPS.md](docs/DEPLOY-VPS.md)
-
-```bash
-# Manual on server
-bash /opt/hr-onboarding/deploy/vps/deploy.sh
-bash /opt/hr-onboarding/deploy/vps/deploy.sh evals   # evals only
-```
-
-### Fly.io (backend)
-
-```bash
-fly launch --name onboardai-api --dockerfile backend/Dockerfile
-fly secrets set OPENAI_API_KEY=sk-...
-fly deploy
-```
-
-### Railway
-
-Connect the repo and set `OPENAI_API_KEY`. Use `backend/Dockerfile` for the API service and `frontend/Dockerfile` for the UI.
-
-## CV Bullet
-
-> **OnboardAI** — Autonomous HR onboarding agent (Python, LangGraph, MCP, React). Multi-tool agent that answers policy questions with citations, generates 30-day onboarding plans, and tracks task completion. Includes automated eval suite (28 scenarios, golden + DeepEval injection scoring). Evolution of production RAG system deployed at hr.433-cloud.com.
-
-## License
-
-MIT
+MIT，詳見 [LICENSE](LICENSE)。
