@@ -1,6 +1,22 @@
 import type { Components } from 'react-markdown';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import type { Root } from 'mdast';
+import { SOURCE_LABELS } from '../locale';
+
+// Change visible labels only; link destinations and code remain untouched.
+function readableSources() {
+  return (tree: Root) => {
+    function visit(node: Root | Root['children'][number]) {
+      if (node.type === 'text') {
+        node.value = node.value.replace(/[A-Za-z0-9_.-]+\.md/g, (filename) => SOURCE_LABELS[filename] ?? filename);
+      } else if ('children' in node) {
+        for (const child of node.children) visit(child as Root['children'][number]);
+      }
+    }
+    visit(tree);
+  };
+}
 
 const markdownComponents: Components = {
   h1: ({ children }) => (
@@ -75,7 +91,7 @@ export default function ChatMarkdown({ content }: { content: string }) {
   if (!content) return null;
 
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+    <ReactMarkdown remarkPlugins={[remarkGfm, readableSources]} components={markdownComponents}>
       {content}
     </ReactMarkdown>
   );

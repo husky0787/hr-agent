@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Run golden evals on the VPS (writes evals/results/latest.json for /admin/evals).
+# Manually run golden evals on the VPS; no public admin page or database required.
 set -euo pipefail
 
 APP_DIR="${APP_DIR:-/opt/hr-onboarding}"
-COMPOSE_FILE="${APP_DIR}/deploy/vps/docker-compose.yml"
+COMPOSE_FILE="${APP_DIR}/docker-compose.yml"
 
 cd "${APP_DIR}"
 mkdir -p "${APP_DIR}/evals/results"

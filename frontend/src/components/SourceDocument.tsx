@@ -38,7 +38,7 @@ export default function SourceDocument({ filename }: { filename: string }) {
       <button
         type="button"
         onClick={showDocument}
-        title={`閱讀 ${filename}`}
+        title={`閱讀 ${title}`}
         aria-haspopup="dialog"
         className="inline-flex items-center rounded-md border border-violet-200/60 bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-violet-500 dark:border-violet-800/50 dark:bg-violet-900/40 dark:text-violet-400 dark:hover:bg-violet-900/70"
       >
@@ -55,7 +55,7 @@ export default function SourceDocument({ filename }: { filename: string }) {
           <header className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-200 p-5 dark:border-zinc-700">
             <div className="min-w-0">
               <h2 id={titleId} className="text-lg font-semibold">{title}</h2>
-              <p className="mt-1 break-all text-xs text-zinc-500 dark:text-zinc-400">{filename}</p>
+              <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">公司文件原文</p>
             </div>
             <button type="button" autoFocus onClick={() => dialogRef.current?.close()} className="shrink-0 rounded-lg px-3 py-2 text-sm hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-violet-500 dark:hover:bg-zinc-800">
               關閉

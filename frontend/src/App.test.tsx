@@ -1,183 +1,137 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
-import { resetOnboarding, streamChat } from './api';
+import { fetchDocuments, fetchSourceDocument, streamChat } from './api';
 
-const question = '每年有多少天有薪年假？';
+vi.mock('./api', () => ({ fetchDocuments: vi.fn(), fetchSourceDocument: vi.fn(), streamChat: vi.fn() }));
 const answer = '全職僱員每年享有 25 天有薪年假。';
-
-vi.mock('./api', () => ({
-  fetchDemoEmployee: vi.fn(async () => ({
-    id: 'alex-chen', name: 'Alex Chen', role: 'Software Engineer', start_day: 1,
-    company: 'Harbour Finch Labs', company_zh: '港雀科技', department: 'Engineering',
-    manager: 'Maya Wong', buddy: 'Jamie Lau', is_demo: true,
-  })),
-  fetchOnboardingStatus: vi.fn(async () => ({
-    employee_id: 'alex-chen', total_tasks: 0, completed_tasks: 0, completion_percent: 0, tasks: [],
-  })),
-  fetchEvalResults: vi.fn(async () => ({
-    results_dir: 'evals/results',
-    golden: { available: false, report: null, path: '' },
-    deepeval: { available: false, report: null, path: '' },
-  })),
-  fetchCheckins: vi.fn(async () => []),
-  completeTask: vi.fn(async () => {}),
-  resetOnboarding: vi.fn(async () => {}),
-  streamChat: vi.fn(async (_message, _employee, _history, onEvent) => {
-    onEvent('citations', ['employee-handbook.md']);
-    onEvent('token', '全職僱員每年享有 25 天有薪年假。');
-    onEvent('done', '全職僱員每年享有 25 天有薪年假。');
-  }),
-}));
 
 beforeEach(() => {
   window.history.replaceState({}, '', '/');
   vi.clearAllMocks();
-  vi.mocked(resetOnboarding).mockResolvedValue(undefined);
+  vi.mocked(fetchDocuments).mockReset();
+  vi.mocked(fetchSourceDocument).mockReset();
+  vi.mocked(streamChat).mockReset();
+  vi.mocked(fetchDocuments).mockResolvedValue([{ filename: 'employee-handbook.md', title: '僱員手冊' }]);
+  vi.mocked(fetchSourceDocument).mockResolvedValue('# 僱員手冊\n\n完整政策文件。');
+  vi.mocked(streamChat).mockImplementation(async (_message, _history, onEvent) => {
+    onEvent('citations', ['employee-handbook.md', 'employee-handbook.md']);
+    onEvent('token', answer);
+    onEvent('done', answer);
+  });
 });
 
 async function openChat() {
   const user = userEvent.setup();
   render(<App />);
-  await screen.findByText('HR Agent');
+  await screen.findByRole('button', { name: '僱員手冊' });
   return user;
 }
 
-async function visitEvalsAndReturn(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole('link', { name: '評估結果' }));
-  await screen.findByRole('heading', { name: '評估結果' });
-  await user.click(screen.getByRole('link', { name: '返回對話' }));
-}
-
-async function askAnnualLeave(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByRole('textbox', { name: '輸入問題' }), question);
+async function ask(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByRole('textbox', { name: '輸入問題' }), '年假有幾多日？');
   await user.click(screen.getByRole('button', { name: '傳送訊息' }));
 }
 
-describe('chat navigation', () => {
-  it('keeps messages, citations and follow-up context after visiting evals', async () => {
+describe('chat and document demo', () => {
+  it('provides documents directly and has no employee or workflow controls', async () => {
+    await openChat();
+    expect(screen.queryByText('Alex Chen')).toBeNull();
+    for (const text of ['入職進度', '跟進會面', '評估結果', '建立第一星期待辦', '重設示範']) {
+      expect(screen.queryByText(text)).toBeNull();
+    }
+    expect(fetchSourceDocument).not.toHaveBeenCalled();
+    expect(fetchDocuments).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves an unsent draft while reading and closing a document', async () => {
     const user = await openChat();
-    await askAnnualLeave(user);
-    await screen.findByText(answer);
+    await user.type(screen.getByRole('textbox', { name: '輸入問題' }), '我想查詢強積金');
+    await user.click(screen.getByRole('button', { name: '僱員手冊' }));
+    const dialog = screen.getByRole('dialog');
+    await within(dialog).findByText('完整政策文件。');
+    await user.click(within(dialog).getByRole('button', { name: '關閉' }));
+    expect((screen.getByRole('textbox', { name: '輸入問題' }) as HTMLTextAreaElement).value).toBe('我想查詢強積金');
+  });
 
-    await visitEvalsAndReturn(user);
-
+  it('keeps follow-up context and deduplicates citation buttons', async () => {
+    const user = await openChat();
+    await ask(user);
     await screen.findByText(answer);
-    expect(screen.getByRole('button', { name: '僱員手冊' })).toBeDefined();
+    // One library button and one citation button.
+    expect(screen.getAllByRole('button', { name: '僱員手冊' })).toHaveLength(2);
     await user.type(screen.getByRole('textbox', { name: '輸入問題' }), '如何申請？');
     await user.click(screen.getByRole('button', { name: '傳送訊息' }));
-    expect(vi.mocked(streamChat).mock.calls.at(-1)?.[2]).toEqual(expect.arrayContaining([
-      { role: 'user', content: question },
+    expect(vi.mocked(streamChat).mock.calls.at(-1)?.[1]).toEqual(expect.arrayContaining([
+      { role: 'user', content: '年假有幾多日？' },
       expect.objectContaining({ role: 'assistant', content: answer }),
     ]));
   });
 
-  it('keeps an unsent draft after visiting evals', async () => {
+  it('finishes a reply while a document is open and disables clear until done', async () => {
+    let finish!: () => void;
+    vi.mocked(streamChat).mockImplementationOnce((_message, _history, onEvent) => new Promise<void>((resolve) => {
+      finish = () => { onEvent('done', answer); resolve(); };
+    }));
     const user = await openChat();
-    await user.type(screen.getByRole('textbox', { name: '輸入問題' }), '我想查詢強積金');
-
-    await visitEvalsAndReturn(user);
-
-    expect((screen.getByRole('textbox', { name: '輸入問題' }) as HTMLTextAreaElement).value)
-      .toBe('我想查詢強積金');
+    await ask(user);
+    expect(screen.getByRole('button', { name: '清除對話' }).hasAttribute('disabled')).toBe(true);
+    await user.click(screen.getByRole('button', { name: '僱員手冊' }));
+    await act(async () => finish());
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: '關閉' }));
+    await screen.findByText(answer);
+    expect(screen.getByRole('button', { name: '清除對話' }).hasAttribute('disabled')).toBe(false);
   });
 
-  it('finishes an in-flight reply while the user views evals', async () => {
-    let finishReply!: () => void;
-    vi.mocked(streamChat).mockImplementationOnce((_message, _employee, _history, onEvent) => (
-      new Promise<void>((resolve) => {
-        finishReply = () => {
-          onEvent('token', answer);
-          onEvent('done', answer);
-          resolve();
-        };
-      })
-    ));
+  it('clears messages and draft locally without reloading documents', async () => {
     const user = await openChat();
-    await askAnnualLeave(user);
-    await waitFor(() => expect(finishReply).toBeTypeOf('function'));
-    await user.click(screen.getByRole('link', { name: '評估結果' }));
-    await screen.findByRole('heading', { name: '評估結果' });
-
-    await act(async () => finishReply());
-    await user.click(screen.getByRole('link', { name: '返回對話' }));
-
+    await ask(user);
     await screen.findByText(answer);
-    expect(screen.getByRole('textbox', { name: '輸入問題' }).hasAttribute('disabled')).toBe(false);
-  });
-});
-
-describe('fictional company demo', () => {
-  it('shows each source and tool badge once after repeated searches', async () => {
-    vi.mocked(streamChat).mockImplementationOnce(async (_message, _employee, _history, onEvent) => {
-      onEvent('citations', ['employee-handbook.md', 'employee-handbook.md']);
-      onEvent('tool_calls', [{ name: 'search_handbook_tool' }, { name: 'search_handbook_tool' }]);
-      onEvent('token', answer);
-      onEvent('done', answer);
-    });
-    const user = await openChat();
-    await askAnnualLeave(user);
-    await screen.findByText(answer);
-    expect(screen.getAllByRole('button', { name: '僱員手冊' })).toHaveLength(1);
-    expect(screen.getAllByText('查閱公司文件')).toHaveLength(1);
-  });
-
-  it('offers guided scenarios and keeps the disclosure on admin pages', async () => {
-    const user = await openChat();
-    await screen.findByRole('heading', { name: 'Harbour Finch Labs｜港雀科技' });
-    for (const name of ['我是今天入職的工程師', '查詢公司福利', '建立第一星期待辦']) {
-      expect(screen.getByRole('button', { name })).toBeDefined();
-    }
-    await user.click(screen.getByRole('button', { name: '查詢公司福利' }));
-    await screen.findByText(answer);
-    expect(vi.mocked(streamChat).mock.calls.at(-1)?.[0]).toContain('健康津貼');
-    await user.click(screen.getByRole('link', { name: '評估結果' }));
-    await screen.findByRole('heading', { name: '評估結果' });
-    expect(screen.getByText('示範環境：公司、員工及內部政策均為虛構')).toBeDefined();
-  });
-
-  it('resets the demo employee and clears chat, citations and draft after success', async () => {
-    const user = await openChat();
-    await askAnnualLeave(user);
-    await screen.findByText(answer);
-    await user.type(screen.getByRole('textbox', { name: '輸入問題' }), '未傳送草稿');
-    await user.click(screen.getByRole('button', { name: '重設示範' }));
-    await screen.findByText('示範已重設，可重新開始。');
-    expect(resetOnboarding).toHaveBeenCalledWith('alex-chen');
+    await user.type(screen.getByRole('textbox', { name: '輸入問題' }), '草稿');
+    await user.click(screen.getByRole('button', { name: '清除對話' }));
     expect(screen.queryByText(answer)).toBeNull();
-    expect(screen.queryByRole('button', { name: '僱員手冊' })).toBeNull();
     expect((screen.getByRole('textbox', { name: '輸入問題' }) as HTMLTextAreaElement).value).toBe('');
-    expect(screen.getByRole('button', { name: '建立第一星期待辦' })).toBeDefined();
+    expect(fetchDocuments).toHaveBeenCalledTimes(1);
   });
 
-  it('preserves the current chat when reset fails', async () => {
-    vi.mocked(resetOnboarding).mockRejectedValueOnce(new Error('未能重設示範，請稍後再試。'));
+  it('recovers from a failed reply without displaying an empty assistant answer', async () => {
+    vi.mocked(streamChat).mockRejectedValueOnce(new Error('文件搜尋暫時不可用。'));
     const user = await openChat();
-    await askAnnualLeave(user);
+    await ask(user);
+    await screen.findByRole('alert');
+    expect(screen.queryByText('正在搜尋文件…')).toBeNull();
+    expect((screen.getByRole('textbox', { name: '輸入問題' }) as HTMLTextAreaElement).value).toBe('年假有幾多日？');
+    expect(screen.getByRole('button', { name: '傳送訊息' }).hasAttribute('disabled')).toBe(false);
+    await user.click(screen.getByRole('button', { name: '傳送訊息' }));
     await screen.findByText(answer);
-    await user.type(screen.getByRole('textbox', { name: '輸入問題' }), '保留草稿');
-    await user.click(screen.getByRole('button', { name: '重設示範' }));
-    await screen.findByText('未能重設示範，請稍後再試。');
-    expect(screen.getByText(answer)).toBeDefined();
-    expect((screen.getByRole('textbox', { name: '輸入問題' }) as HTMLTextAreaElement).value).toBe('保留草稿');
+    expect(screen.getAllByText('年假有幾多日？')).toHaveLength(1);
   });
 
-  it('disables reset until an active reply completes', async () => {
-    let finishReply!: () => void;
-    vi.mocked(streamChat).mockImplementationOnce((_message, _employee, _history, onEvent) => (
-      new Promise<void>((resolve) => {
-        finishReply = () => { onEvent('done', answer); resolve(); };
-      })
-    ));
+  it('does not gate chat on document list availability', async () => {
+    vi.mocked(fetchDocuments).mockRejectedValueOnce(new Error('文件清單暫時不可用。'));
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole('alert');
+    await ask(user);
+    await screen.findByText(answer);
+  });
+
+  it('does not expose retired admin pages', async () => {
+    window.history.replaceState({}, '', '/admin/evals');
+    render(<App />);
+    await screen.findByText('找不到此頁面。');
+    expect(fetchDocuments).not.toHaveBeenCalled();
+  });
+
+  it('aborts the active request when stopped', async () => {
+    vi.mocked(streamChat).mockImplementationOnce((_message, _history, _onEvent, signal) => new Promise<void>((_resolve, reject) => {
+      signal?.addEventListener('abort', () => reject(new DOMException('Stopped', 'AbortError')));
+    }));
     const user = await openChat();
-    await askAnnualLeave(user);
-    await waitFor(() => expect(finishReply).toBeTypeOf('function'));
-    const reset = screen.getByRole('button', { name: '重設示範' });
-    expect(reset.hasAttribute('disabled')).toBe(true);
-    await user.click(reset);
-    expect(resetOnboarding).not.toHaveBeenCalled();
-    await act(async () => finishReply());
-    await waitFor(() => expect(reset.hasAttribute('disabled')).toBe(false));
+    await ask(user);
+    await user.click(screen.getByRole('button', { name: '停止回覆' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('已停止回覆。'));
+    expect(vi.mocked(streamChat).mock.calls[0][3]?.aborted).toBe(true);
   });
 });

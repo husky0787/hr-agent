@@ -13,20 +13,17 @@ if [[ "${1:-}" == "deepeval" ]]; then
 fi
 
 if [[ ! -f .env ]]; then
-  echo "Missing .env — copy .env.example and set OPENAI_API_KEY"
+  echo "Missing .env — configure chat and embedding API credentials"
   exit 1
 fi
 
-echo "Starting Postgres (if needed)..."
-docker-compose up -d postgres
-
 if [[ "$MODE" == "deepeval" ]]; then
   echo "Running DeepEval in Docker..."
-  docker-compose --profile evals run --rm --build --entrypoint python evals /app/evals/run_deepeval.py "$@"
+  docker compose --profile evals run --rm --build --entrypoint python evals /app/evals/run_deepeval.py "$@"
   RESULTS_FILE="evals/results/deepeval-latest.json"
 else
   echo "Running golden evals in Docker..."
-  docker-compose --profile evals run --rm --build evals "$@"
+  docker compose --profile evals run --rm --build evals "$@"
   RESULTS_FILE="evals/results/latest.json"
 fi
 

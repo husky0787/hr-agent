@@ -25,6 +25,8 @@ describe('source document reader', () => {
     await user.click(screen.getByRole('button', { name: '僱員手冊' }));
     const dialog = screen.getByRole('dialog', { name: '僱員手冊' });
     await within(dialog).findByText('25 天');
+    expect(screen.queryByText('employee-handbook.md')).toBeNull();
+    expect(screen.getByRole('button', { name: '僱員手冊' }).getAttribute('title')).toBe('閱讀 僱員手冊');
     expect(fetchSourceDocument).toHaveBeenCalledWith('employee-handbook.md', expect.any(AbortSignal));
     await user.click(within(dialog).getByRole('button', { name: '關閉' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());

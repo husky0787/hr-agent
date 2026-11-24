@@ -1,743 +1,144 @@
-import { AnimatePresence, motion } from 'framer-motion';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import {
-  completeTask,
-  fetchDemoEmployee,
-  fetchOnboardingStatus,
-  resetOnboarding,
-  streamChat,
-} from '../api';
-import type { AgentEvent, ChatMessage, DemoEmployee, OnboardingStatus } from '../api';
+import { useEffect, useRef, useState } from 'react';
+import { fetchDocuments, streamChat } from '../api';
+import type { ChatMessage, CompanyDocument } from '../api';
+import { useTheme } from '../ThemeContext';
 import ChatMarkdown from '../components/ChatMarkdown';
 import SourceDocument from '../components/SourceDocument';
-import { useTheme } from '../ThemeContext';
-import { AGENT_LABELS, CATEGORY_LABELS, TOOL_LABELS, agentDescription } from '../locale';
-
-// ─── Icons ────────────────────────────────────────────────────────────────────
-
-function SunIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
-    </svg>
-  );
-}
-
-function MoonIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-    </svg>
-  );
-}
-
-function SendIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 2 11 13M22 2 15 22 11 13 2 9l20-7z" />
-    </svg>
-  );
-}
-
-function CheckIcon({ size = 14 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  );
-}
-
-function ToolIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-    </svg>
-  );
-}
-
-function ArrowRightIcon() {
-  return (
-    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 12h14M12 5l7 7-7 7" />
-    </svg>
-  );
-}
-
-// ─── Sub-components ────────────────────────────────────────────────────────────
-
-function ThinkingDots() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -6 }}
-      className="flex items-center gap-1 px-4 py-3"
-    >
-      {[0, 1, 2].map((i) => (
-        <motion.span
-          key={i}
-          className="block w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-zinc-500"
-          animate={{ y: [0, -5, 0] }}
-          transition={{ repeat: Infinity, duration: 0.9, delay: i * 0.18, ease: 'easeInOut' }}
-        />
-      ))}
-    </motion.div>
-  );
-}
-
-function ToolCallBadge({ name }: { name: string }) {
-  const label = TOOL_LABELS[name] ?? '處理入職事項';
-  return (
-    <motion.span
-      initial={{ opacity: 0, scale: 0.85 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium
-        bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 border border-amber-200/60 dark:border-amber-800/50"
-    >
-      <ToolIcon />
-      {label}
-    </motion.span>
-  );
-}
-
-function CitationChip({ text }: { text: string }) {
-  return <SourceDocument filename={text} />;
-}
-
-function StreamingText({ text, active }: { text: string; active: boolean }) {
-  const [displayed, setDisplayed] = useState('');
-
-  useEffect(() => {
-    if (!active) {
-      setDisplayed(text);
-      return;
-    }
-    if (displayed.length >= text.length) return;
-    const timer = setTimeout(() => {
-      setDisplayed(text.slice(0, displayed.length + 3));
-    }, 12);
-    return () => clearTimeout(timer);
-  }, [text, displayed, active]);
-
-  return (
-    <span className={active && displayed.length < text.length ? 'streaming-cursor' : ''}>
-      <ChatMarkdown content={displayed} />
-    </span>
-  );
-}
-
-// ─── Agent Flow Panel ──────────────────────────────────────────────────────────
-
-const STATUS_DOT: Record<string, string> = {
-  started: 'bg-zinc-400 dark:bg-zinc-500',
-  completed: 'bg-emerald-500',
-  tool: 'bg-amber-500',
-};
-
-const STATUS_ICON: Record<string, React.ReactNode> = {
-  started: <ArrowRightIcon />,
-  completed: <CheckIcon size={10} />,
-  tool: <ToolIcon />,
-};
-
-function AgentFlowPanel({ entries }: { entries: AgentEvent[] }) {
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [entries]);
-
-  if (entries.length === 0) return null;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: 'auto' }}
-      exit={{ opacity: 0, height: 0 }}
-      className="overflow-hidden"
-    >
-      <div className="px-4 pt-4 pb-3 border-t border-zinc-200 dark:border-zinc-800">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-400 mb-3">
-          處理進度
-        </p>
-        <div className="space-y-0 max-h-44 overflow-y-auto">
-          {entries.map((entry, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, x: -8 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.2 }}
-              className="flex items-start gap-2.5 relative"
-            >
-              {/* Timeline line */}
-              {i < entries.length - 1 && (
-                <div className="absolute left-[7px] top-[18px] w-px h-full bg-zinc-200 dark:bg-zinc-800" />
-              )}
-              {/* Dot */}
-              <div className={`relative z-10 mt-1 shrink-0 w-3.5 h-3.5 rounded-full flex items-center justify-center text-white ${STATUS_DOT[entry.status] ?? 'bg-zinc-300'}`}>
-                {entry.status === 'started' && (
-                  <motion.div
-                    className="absolute inset-0 rounded-full bg-zinc-400 dark:bg-zinc-500"
-                    animate={{ scale: [1, 1.6, 1], opacity: [0.5, 0, 0.5] }}
-                    transition={{ repeat: Infinity, duration: 1.5 }}
-                  />
-                )}
-                <span className="relative z-10 text-white">
-                  {STATUS_ICON[entry.status]}
-                </span>
-              </div>
-              {/* Content */}
-              <div className="pb-3 min-w-0">
-                <p className="text-xs leading-tight font-mono">
-                  <span className="font-semibold text-zinc-700 dark:text-zinc-300">
-                    {AGENT_LABELS[entry.agent] ?? '入職助理'}
-                  </span>
-                  <span className="text-zinc-400 dark:text-zinc-400"> · </span>
-                  <span className="text-zinc-500 dark:text-zinc-400 wrap-break-word">
-                    {agentDescription(entry)}
-                  </span>
-                </p>
-              </div>
-            </motion.div>
-          ))}
-          <div ref={bottomRef} />
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-// ─── Onboarding Progress ───────────────────────────────────────────────────────
-
-const CATEGORY_STYLES: Record<string, string> = {
-  HR:   'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400',
-  IT:   'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400',
-  Team: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400',
-};
-
-function CircularProgress({ percent }: { percent: number }) {
-  const r = 28;
-  const circ = 2 * Math.PI * r;
-  const offset = circ - (percent / 100) * circ;
-
-  return (
-    <div className="relative w-16 h-16 shrink-0">
-      <svg width="64" height="64" viewBox="0 0 64 64" className="-rotate-90">
-        <circle cx="32" cy="32" r={r} fill="none" strokeWidth="5"
-          className="stroke-zinc-100 dark:stroke-zinc-800" />
-        <motion.circle
-          cx="32" cy="32" r={r} fill="none" strokeWidth="5"
-          strokeLinecap="round"
-          className="stroke-violet-500 dark:stroke-violet-400"
-          strokeDasharray={circ}
-          initial={{ strokeDashoffset: circ }}
-          animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 0.8, ease: 'easeOut' }}
-        />
-      </svg>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-sm font-bold text-zinc-800 dark:text-zinc-200">{percent}%</span>
-      </div>
-    </div>
-  );
-}
-
-function OnboardingProgress({
-  status,
-  onComplete,
-}: {
-  status: OnboardingStatus | null;
-  onComplete: (id: number) => void;
-}) {
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">入職進度</h2>
-      </div>
-
-      {status && (
-        <>
-          <div className="flex items-center gap-4">
-            <CircularProgress percent={status.completion_percent} />
-            <div>
-              <p className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
-                已完成 {status.completed_tasks} / {status.total_tasks} 項
-              </p>
-              <p className="text-xs text-zinc-400 dark:text-zinc-500">入職待辦事項</p>
-            </div>
-          </div>
-
-          <div className="space-y-1.5 max-h-[calc(100vh-420px)] overflow-y-auto -mx-1 px-1">
-            {status.tasks.length === 0 && (
-              <p className="text-xs text-zinc-400 dark:text-zinc-400 italic py-2">
-                暫時沒有待辦事項。你可以問：「入職第一星期要做甚麼？」
-              </p>
-            )}
-            <AnimatePresence>
-              {status.tasks.map((task) => (
-                <motion.button
-                  key={task.id}
-                  layout
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  onClick={() => onComplete(task.id)}
-                  className="w-full flex items-start gap-2.5 p-2.5 rounded-lg text-left
-                    border border-transparent hover:border-zinc-200 dark:hover:border-zinc-800
-                    hover:bg-zinc-50 dark:hover:bg-zinc-800/50 transition-all group"
-                >
-                  <div className={`shrink-0 mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center transition-colors
-                    ${task.status === 'completed'
-                      ? 'bg-emerald-500 border-emerald-500 text-white'
-                      : 'border-zinc-300 dark:border-zinc-700 group-hover:border-violet-400 dark:group-hover:border-violet-600'
-                    }`}
-                  >
-                    {task.status === 'completed' && <CheckIcon size={9} />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-xs leading-relaxed ${
-                      task.status === 'completed'
-                        ? 'line-through text-zinc-400 dark:text-zinc-400'
-                        : 'text-zinc-700 dark:text-zinc-300'
-                    }`}>
-                      {task.title}
-                    </p>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <span className={`rounded px-1.5 py-px text-[10px] font-medium ${
-                        CATEGORY_STYLES[task.category] ?? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'
-                      }`}>
-                        {CATEGORY_LABELS[task.category] ?? task.category}
-                      </span>
-                      <span className="text-[10px] text-zinc-400 dark:text-zinc-400">
-                        第 {task.due_day} 天
-                      </span>
-                    </div>
-                  </div>
-                </motion.button>
-              ))}
-            </AnimatePresence>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ─── Chat Message ──────────────────────────────────────────────────────────────
-
-function ChatMessageBubble({
-  msg,
-  isStreaming,
-}: {
-  msg: ChatMessage;
-  isStreaming: boolean;
-}) {
-  const isUser = msg.role === 'user';
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.22, ease: 'easeOut' }}
-      className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
-    >
-      <div className={`max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-        isUser
-          ? 'bg-violet-600 text-white rounded-br-sm'
-          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 rounded-bl-sm'
-      }`}>
-        {isUser ? (
-          <p className="whitespace-pre-wrap">{msg.content}</p>
-        ) : (
-          <StreamingText text={msg.content} active={isStreaming} />
-        )}
-        {msg.toolCalls && msg.toolCalls.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {msg.toolCalls.map((t) => <ToolCallBadge key={t} name={t} />)}
-          </div>
-        )}
-        {msg.citations && msg.citations.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
-            {msg.citations.map((c) => <CitationChip key={c} text={c} />)}
-          </div>
-        )}
-      </div>
-    </motion.div>
-  );
-}
-
-// ─── Suggestions ──────────────────────────────────────────────────────────────
 
 const SUGGESTIONS = [
-  { title: '我是今天入職的工程師', message: '我今天以軟件工程師身份入職，請介紹公司、我的主管、入職夥伴及第一天要準備的事項。' },
   { title: '查詢公司福利', message: '請介紹公司的有薪年假、醫療保險登記期限及健康津貼。' },
-  { title: '建立第一星期待辦', message: '請根據首 30 天入職安排，幫我建立第一星期的待辦事項。' },
+  { title: '了解入職安排', message: '第一天入職要準備甚麼？' },
+  { title: '查閱報銷流程', message: '公司開支報銷的流程及付款時間是甚麼？' },
 ];
-
-function EmptyState({ onSuggest, employee, disabled }: { onSuggest: (s: string) => void; employee: DemoEmployee | null; disabled: boolean }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex min-h-full flex-col items-center justify-center gap-5 py-6"
-    >
-      <div className="text-center">
-        <div className="w-10 h-10 rounded-full bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center mx-auto mb-3">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-violet-600 dark:text-violet-400">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-          </svg>
-        </div>
-        <h1 className="mb-2 text-base font-semibold">{employee ? `${employee.company}｜${employee.company_zh}` : '香港團隊入職示範'}</h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400 max-w-sm">
-          一家約 40 人的虛構香港軟件公司，為中小企開發 AI 工作流程工具。選擇情境開始體驗。
-        </p>
-      </div>
-      <div className="flex flex-col gap-2 w-full max-w-sm">
-        {SUGGESTIONS.map((s, i) => (
-          <motion.button
-            key={s.title}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.08 }}
-            onClick={() => onSuggest(s.message)}
-            disabled={disabled}
-            className="text-left px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-800
-              bg-white dark:bg-zinc-900 text-sm text-zinc-700 dark:text-zinc-300
-              hover:border-violet-300 dark:hover:border-violet-700
-              hover:bg-violet-50 dark:hover:bg-violet-900/20
-              transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {s.title}
-          </motion.button>
-        ))}
-      </div>
-    </motion.div>
-  );
-}
-
-// ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function ChatPage() {
   const { theme, toggle } = useTheme();
-  const [employee, setEmployee] = useState<DemoEmployee | null>(null);
-  const [status, setStatus] = useState<OnboardingStatus | null>(null);
+  const [documents, setDocuments] = useState<CompanyDocument[]>([]);
+  const [documentError, setDocumentError] = useState('');
+  const [reload, setReload] = useState(0);
+  const [showDocuments, setShowDocuments] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [resetting, setResetting] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [agentLog, setAgentLog] = useState<AgentEvent[]>([]);
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  const refreshStatus = useCallback(async (employeeId: string) => {
-    const data = await fetchOnboardingStatus(employeeId);
-    setStatus(data);
-  }, []);
+  const [stage, setStage] = useState('');
+  const [error, setError] = useState('');
+  const activeRequest = useRef<AbortController | null>(null);
+  const bottom = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetchDemoEmployee().then(setEmployee).catch(console.error);
-  }, []);
+    const controller = new AbortController();
+    setDocumentError('');
+    fetchDocuments(controller.signal).then(setDocuments).catch((err: unknown) => {
+      if (!controller.signal.aborted) setDocumentError(err instanceof Error ? err.message : '未能載入文件。');
+    });
+    return () => controller.abort();
+  }, [reload]);
+  useEffect(() => () => activeRequest.current?.abort(), []);
+  useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, stage]);
 
-  useEffect(() => {
-    if (employee) refreshStatus(employee.id);
-  }, [employee, refreshStatus]);
-
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
-
-  const handleSend = async (text?: string) => {
-    const message = (text ?? input).trim();
-    if (!message || !employee || loading || resetting) return;
-
-    setInput('');
-    setNotice(null);
-    setError(null);
-    setLoading(true);
-    setAgentLog([]);
-    if (inputRef.current) {
-      inputRef.current.style.height = 'auto';
-      inputRef.current.focus();
+  async function send(text?: string) {
+    const question = (text ?? input).trim();
+    if (!question || loading) return;
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    let conversation = messages;
+    if (error && conversation.at(-1)?.failed) conversation = conversation.slice(0, -1);
+    if (error && conversation.at(-1)?.role === 'user' && conversation.at(-1)?.content === question) {
+      conversation = conversation.slice(0, -1);
     }
-
-    const userMsg: ChatMessage = { role: 'user', content: message };
-    setMessages((prev) => [...prev, userMsg]);
-
-    let assistantContent = '';
+    const history = conversation.filter((item) => !item.failed && item.content);
+    setInput('');
+    setError('');
+    setLoading(true);
+    setStage('正在辨識主題…');
+    setMessages([...conversation, { role: 'user', content: question }, { role: 'assistant', content: '' }]);
+    let content = '';
     let citations: string[] = [];
-    let toolCalls: string[] = [];
-    let agentEvents: AgentEvent[] = [];
-
+    const update = () => setMessages((previous) => [
+      ...previous.slice(0, -1), { role: 'assistant', content, citations },
+    ]);
     try {
-      await streamChat(message, employee.id, messages, (event, data) => {
-        if (event === 'token') {
-          assistantContent += data as string;
-          setMessages((prev) => {
-            const next = [...prev];
-            const last = next[next.length - 1];
-            if (last?.role === 'assistant') {
-              next[next.length - 1] = { ...last, content: assistantContent, citations, toolCalls, agentEvents };
-            } else {
-              next.push({ role: 'assistant', content: assistantContent, citations, toolCalls, agentEvents });
-            }
-            return next;
-          });
+      await streamChat(question, history, (event, data) => {
+        if (event === 'agent_log') {
+          const entry = data as { agent: string; status: string };
+          setStage(entry.agent === 'answer' ? '正在準備回答…' : entry.agent === 'identify_topics' ? '正在辨識主題…' : '正在搜尋文件…');
         }
         if (event === 'citations') citations = [...new Set(data as string[])];
-        if (event === 'tool_calls') {
-          toolCalls = [...new Set((data as { name: string }[]).map((t) => t.name))];
-        }
-        if (event === 'agent_log') {
-          const entry = data as AgentEvent;
-          setAgentLog((prev) => [...prev, entry]);
-          agentEvents = [...agentEvents, entry];
-        }
-        if (event === 'agent_events') {
-          agentEvents = data as AgentEvent[];
-        }
-        if (event === 'done') {
-          assistantContent = data as string;
-        }
-        if (event === 'error') {
-          console.error('Chat response failed:', data);
-          throw new Error('助理暫時未能完成回覆，請稍後再試。');
-        }
-      });
-
-      setMessages((prev) => {
-        const next = [...prev];
-        const idx = next.findIndex((m, i) => m.role === 'assistant' && i === next.length - 1);
-        const assistantMsg: ChatMessage = { role: 'assistant', content: assistantContent, citations, toolCalls, agentEvents };
-        if (idx >= 0) next[idx] = assistantMsg;
-        else next.push(assistantMsg);
-        return next;
-      });
-
-      await refreshStatus(employee.id);
-    } catch (e) {
-      setError(e instanceof Error && e.message !== 'Failed to fetch'
-        ? e.message : '未能連接服務，請檢查連線後再試。');
+        if (event === 'token') { content += data as string; update(); }
+        if (event === 'done') { content = data as string; update(); }
+      }, controller.signal);
+    } catch (err) {
+      const cancelled = controller.signal.aborted;
+      setError(cancelled ? '已停止回覆。' : err instanceof Error && err.message !== 'Failed to fetch'
+        ? err.message : '未能連接服務，請稍後再試。');
+      setInput(question);
+      setMessages((previous) => content
+        ? [...previous.slice(0, -1), { role: 'assistant', content, citations, failed: true }]
+        : previous.slice(0, -1));
     } finally {
       setLoading(false);
+      setStage('');
+      activeRequest.current = null;
     }
-  };
+  }
 
-  const handleComplete = async (taskId: number) => {
-    if (!employee) return;
-    await completeTask(employee.id, taskId);
-    await refreshStatus(employee.id);
-  };
-
-  const handleReset = async () => {
-    if (!employee || loading || resetting) return;
-    setResetting(true);
-    setError(null);
-    setNotice(null);
-    try {
-      await resetOnboarding(employee.id);
-      await refreshStatus(employee.id);
-      setMessages([]);
-      setAgentLog([]);
-      setInput('');
-      if (inputRef.current) inputRef.current.style.height = 'auto';
-      setNotice('示範已重設，可重新開始。');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '未能重設示範，請稍後再試。');
-    } finally {
-      setResetting(false);
-    }
-  };
-
-  const showThinking =
-    loading &&
-    (messages.length === 0 ||
-      messages[messages.length - 1]?.role === 'user' ||
-      (messages[messages.length - 1]?.role === 'assistant' &&
-        !messages[messages.length - 1]?.content));
+  function clearChat() {
+    if (loading) return;
+    setMessages([]); setInput(''); setError('');
+  }
 
   return (
-    <div className="h-full flex flex-col bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 overflow-hidden">
-
-      {/* ── Header ── */}
-      <header className="shrink-0 h-14 flex items-center justify-between px-4 sm:px-5 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className="w-7 h-7 rounded-lg bg-violet-600 flex items-center justify-center shrink-0">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2a10 10 0 1 0 10 10" />
-              <path d="M12 6v6l4 2" />
-            </svg>
-          </div>
-          <div>
-            <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">HR Agent</span>
-          </div>
+    <div className="flex h-full min-h-0 flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+      <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-zinc-200 bg-white px-4 dark:border-zinc-800 dark:bg-zinc-900 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <div aria-hidden="true" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-lg text-white">H</div>
+          <div className="min-w-0"><span className="font-semibold">HR Agent</span><p className="truncate text-xs text-zinc-500">港雀科技 · 公司文件助理</p></div>
         </div>
-
-        <div className="flex items-center gap-2 sm:gap-3">
-          <Link to="/admin/checkins" className="whitespace-nowrap text-xs text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">
-            跟進會面
-          </Link>
-          <Link to="/admin/evals" className="whitespace-nowrap text-xs text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 transition-colors">
-            評估結果
-          </Link>
-          <div className="w-px h-4 bg-zinc-200 dark:bg-zinc-800" />
-          <motion.button
-            onClick={toggle}
-            whileTap={{ scale: 0.88 }}
-            className="w-8 h-8 rounded-lg flex items-center justify-center
-              text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
-            aria-label={theme === 'dark' ? '轉用淺色模式' : '轉用深色模式'}
-          >
-            <AnimatePresence mode="wait">
-              <motion.span
-                key={theme}
-                initial={{ opacity: 0, rotate: -30, scale: 0.7 }}
-                animate={{ opacity: 1, rotate: 0, scale: 1 }}
-                exit={{ opacity: 0, rotate: 30, scale: 0.7 }}
-                transition={{ duration: 0.18 }}
-              >
-                {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
-              </motion.span>
-            </AnimatePresence>
-          </motion.button>
+        <div className="flex shrink-0 items-center gap-1 text-xs sm:gap-3">
+          <button type="button" aria-expanded={showDocuments} onClick={() => setShowDocuments(!showDocuments)} className="rounded-lg px-2 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800 md:hidden">公司文件</button>
+          <button type="button" onClick={clearChat} disabled={loading} className="rounded-lg px-2 py-2 hover:bg-zinc-100 disabled:opacity-40 dark:hover:bg-zinc-800">清除對話</button>
+          <button type="button" onClick={toggle} aria-label={theme === 'dark' ? '切換淺色模式' : '切換深色模式'} className="rounded-lg px-2 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-800">{theme === 'dark' ? '☀' : '☾'}</button>
         </div>
       </header>
-
-      <details className="lg:hidden shrink-0 max-h-[40vh] overflow-y-auto border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-2">
-        <summary className="cursor-pointer text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          入職進度 · 已完成 {status?.completion_percent ?? 0}%
-        </summary>
-        <div className="py-3">
-          <OnboardingProgress status={status} onComplete={handleComplete} />
-        </div>
-      </details>
-
-      {/* ── Main ── */}
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-
-        {/* Chat column */}
-        <main className="flex-1 flex flex-col min-w-0">
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-            <AnimatePresence initial={false}>
-              {messages.length === 0 && !loading && (
-                <EmptyState key="empty" onSuggest={handleSend} employee={employee} disabled={resetting || !employee} />
-              )}
-
-              {messages.map((msg, i) => {
-                if (msg.role === 'assistant' && !msg.content && loading) return null;
-                const isStreaming = loading && i === messages.length - 1 && msg.role === 'assistant';
-                return (
-                  <ChatMessageBubble
-                    key={i}
-                    msg={msg}
-                    isStreaming={isStreaming}
-                  />
-                );
-              })}
-
-              {showThinking && (
-                <motion.div key="thinking" className="flex justify-start">
-                  <div className="rounded-2xl rounded-bl-sm bg-zinc-100 dark:bg-zinc-800">
-                    <ThinkingDots />
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <div ref={chatEndRef} />
-          </div>
-
-          {/* Agent flow (inline, above input) */}
-          <AnimatePresence>
-            {agentLog.length > 0 && (
-              <AgentFlowPanel key="agentflow" entries={agentLog} />
-            )}
-          </AnimatePresence>
-
-          {/* Error */}
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 4 }}
-                className="mx-4 mb-2 px-3 py-2 rounded-lg text-xs
-                  bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400
-                  border border-red-200 dark:border-red-900/60"
-              >
-                {error}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Input */}
-          <div className="shrink-0 p-3 border-t border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
-            <div className="mx-auto mb-2 flex max-w-3xl items-center justify-between gap-3 text-xs">
-              <span role="status" className="text-zinc-500 dark:text-zinc-400">{notice ?? '可查詢公司政策，或建立示範入職事項。'}</span>
-              <button type="button" onClick={handleReset} disabled={loading || resetting || !employee} title="清除示範待辦、跟進會面及本頁對話" className="shrink-0 rounded-md px-2 py-1 text-violet-600 hover:bg-violet-50 disabled:opacity-40 dark:text-violet-400 dark:hover:bg-violet-900/20">{resetting ? '正在重設…' : '重設示範'}</button>
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <aside className={`${showDocuments ? 'block' : 'hidden'} max-h-[40dvh] shrink-0 overflow-y-auto border-b border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 md:block md:max-h-none md:w-64 md:border-b-0 md:border-r`}>
+          <h2 className="mb-2 text-sm font-semibold">公司文件</h2>
+          <p className="mb-4 text-xs leading-relaxed text-zinc-500">直接閱讀原文，或在對話中查詢政策及入職安排。</p>
+          <div className="flex flex-col items-start gap-3">{documents.map((document) => <SourceDocument key={document.filename} filename={document.filename} />)}</div>
+          {!documents.length && !documentError && <p role="status" className="text-xs text-zinc-500">正在載入文件…</p>}
+          {documentError && <div className="text-xs"><p role="alert">{documentError}</p><button type="button" className="mt-2 text-violet-600" onClick={() => setReload((value) => value + 1)}>重試文件清單</button></div>}
+        </aside>
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6">
+            <div className="mx-auto max-w-3xl">
+              {!messages.length && <section className="mx-auto flex max-w-lg flex-col items-center gap-5 py-8 text-center sm:py-16">
+                <span aria-hidden="true" className="rounded-2xl bg-violet-100 px-4 py-3 text-2xl text-violet-600 dark:bg-violet-900/40">✦</span>
+                <div><h1 className="text-lg font-semibold">Harbour Finch Labs｜港雀科技</h1><p className="mt-3 text-sm leading-6 text-zinc-500">查詢公司政策、福利及入職安排。回答附有來源，方便你閱讀完整文件。</p></div>
+                <div className="grid w-full gap-2">{SUGGESTIONS.map((item) => <button key={item.title} type="button" onClick={() => send(item.message)} className="rounded-xl border border-zinc-200 bg-white px-4 py-3 text-left text-sm transition-colors hover:border-violet-300 dark:border-zinc-800 dark:bg-zinc-900">{item.title}<span aria-hidden="true" className="float-right text-zinc-400">↗</span></button>)}</div>
+              </section>}
+              <div className="space-y-6" aria-label="對話紀錄">{messages.map((message, index) => <article key={index} className={message.role === 'user' ? 'ml-auto max-w-[85%] rounded-2xl bg-violet-600 px-4 py-3 text-sm leading-6 text-white' : 'max-w-full text-sm leading-7'}>
+                {message.role === 'user' ? <p className="whitespace-pre-wrap break-words">{message.content}</p> : <>
+                  {message.content ? <ChatMarkdown content={message.content} /> : <p role="status" className="animate-pulse text-zinc-500">{stage || '正在準備回答…'}</p>}
+                  {message.failed && <p className="mt-2 text-xs text-amber-600">回覆未完成</p>}
+                  {!!message.citations?.length && <div className="mt-3 flex flex-wrap items-center gap-2"><span className="text-xs text-zinc-500">參考文件</span>{message.citations.map((name) => <SourceDocument key={name} filename={name} />)}</div>}
+                </>}
+              </article>)}</div>
+              <div ref={bottom} />
             </div>
-            <form
-              onSubmit={(e) => { e.preventDefault(); handleSend(); }}
-              className="flex gap-2 items-end max-w-3xl mx-auto"
-            >
-              <textarea
-                ref={inputRef}
-                rows={1}
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value);
-                  e.target.style.height = 'auto';
-                  e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
-                    handleSend();
-                  }
-                }}
-                placeholder="輸入有關入職安排或公司政策的問題…"
-                aria-label="輸入問題"
-                disabled={loading || resetting}
-                className="flex-1 bg-zinc-100 dark:bg-zinc-800 rounded-xl px-4 py-2.5 text-sm
-                  placeholder:text-zinc-500 dark:placeholder:text-zinc-400
-                  text-zinc-900 dark:text-zinc-100
-                  border border-transparent focus:border-violet-400 dark:focus:border-violet-600
-                  focus:outline-none transition-colors resize-none overflow-y-auto leading-relaxed"
-                style={{ minHeight: '42px', maxHeight: '200px' }}
-              />
-              <motion.button
-                type="submit"
-                aria-label={loading ? '正在回覆' : '傳送訊息'}
-                disabled={loading || resetting || !employee || !input.trim()}
-                whileTap={{ scale: 0.9 }}
-                className="shrink-0 w-9 h-9 rounded-xl bg-violet-600 hover:bg-violet-700
-                  disabled:opacity-40 disabled:cursor-not-allowed
-                  flex items-center justify-center text-white transition-colors"
-              >
-                {loading ? (
-                  <motion.div
-                    className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white"
-                    animate={{ rotate: 360 }}
-                    transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }}
-                  />
-                ) : (
-                  <SendIcon />
-                )}
-              </motion.button>
-            </form>
+          </div>
+          <div className="shrink-0 border-t border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900 sm:px-6">
+            <div className="mx-auto max-w-3xl">
+              {error && <p role="alert" className="mb-3 text-sm text-rose-600 dark:text-rose-400">{error}</p>}
+              <form onSubmit={(event) => { event.preventDefault(); void send(); }} className="flex items-end gap-3 rounded-2xl border border-zinc-200 bg-zinc-50 p-2 dark:border-zinc-700 dark:bg-zinc-950">
+                <textarea aria-label="輸入問題" placeholder="詢問公司政策或文件內容…" value={input} onChange={(event) => setInput(event.target.value)} maxLength={4000} disabled={loading} rows={2} onKeyDown={(event) => {
+                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); void send(); }
+                }} className="max-h-40 min-h-12 flex-1 resize-none bg-transparent px-2 py-1 text-sm leading-6 outline-none placeholder:text-zinc-400 disabled:opacity-60" />
+                {loading ? <button type="button" aria-label="停止回覆" onClick={() => activeRequest.current?.abort()} className="rounded-xl bg-zinc-800 px-4 py-2 text-sm text-white dark:bg-zinc-700">停止</button> : <button type="submit" aria-label="傳送訊息" disabled={!input.trim()} className="rounded-xl bg-violet-600 px-4 py-2 text-sm text-white hover:bg-violet-700 disabled:opacity-40">傳送</button>}
+              </form>
+              <p className="mt-2 text-center text-[11px] text-zinc-400">回答僅供參考，請以來源文件為準。Enter 傳送 · Shift+Enter 換行</p>
+            </div>
           </div>
         </main>
-
-        {/* Sidebar */}
-        <aside className="hidden lg:flex flex-col w-72 xl:w-80 border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-y-auto p-4">
-          <OnboardingProgress
-            status={status}
-            onComplete={handleComplete}
-          />
-        </aside>
       </div>
     </div>
   );

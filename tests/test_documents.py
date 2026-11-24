@@ -16,7 +16,6 @@ from shared.documents import DOCUMENT_FILENAMES
 
 class DocumentApiTests(unittest.TestCase):
     def setUp(self):
-        # No lifespan context: document reads do not require database startup.
         self.client = TestClient(app)
         self.addCleanup(self.client.close)
 
@@ -43,6 +42,14 @@ class DocumentApiTests(unittest.TestCase):
             with patch("shared.documents.SEED_DATA_DIR", Path(directory)):
                 response = self.client.get("/api/documents/employee-handbook.md")
         self.assertEqual(response.status_code, 404)
+
+    def test_health_and_document_list_without_database_or_keys(self):
+        with TestClient(app) as client:
+            self.assertEqual(client.get('/health').json(), {'status': 'ok'})
+            documents = client.get('/api/documents').json()['documents']
+            self.assertEqual({item['filename'] for item in documents}, DOCUMENT_FILENAMES)
+            for path in ('/api/employee/demo', '/api/onboarding/alex-chen/status', '/api/admin/checkins', '/api/evals/results'):
+                self.assertEqual(client.get(path).status_code, 404)
 
 
 if __name__ == "__main__":

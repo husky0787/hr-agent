@@ -1,72 +1,74 @@
 from __future__ import annotations
 
 import json
-from typing import Any
-
-from contextlib import asynccontextmanager
+import logging
+import os
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from agent.onboarding_agent import run_agent, stream_agent
+from agent.multi_agent import run_async
+from agent.onboarding_agent import stream_agent
+from agent.providers import ChatError
 from agent.security import InputValidationError, validate_message_length
-from shared.config import DEFAULT_EMPLOYEE_ID
-from shared.company import DEMO_EMPLOYEE
-from shared.documents import read_document
-from shared.eval_results import load_eval_reports
-from shared.tasks import complete_task, get_onboarding_status, list_checkins, reset_employee_data
+from shared.documents import list_documents, read_document
+from shared.rag import EmbeddingError
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    from shared.db import init_db
-
-    init_db()
-    yield
-
-
-app = FastAPI(
-    title="HR Agent — Harbour Finch Labs Demo",
-    description="Autonomous HR onboarding agent",
-    version="1.0.0",
-    lifespan=lifespan,
-)
-
+logger = logging.getLogger(__name__)
+for log_name in ("agent.providers", "shared.rag"):
+    usage_logger = logging.getLogger(log_name)
+    if not usage_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(levelname)s %(name)s %(message)s"))
+        usage_logger.addHandler(handler)
+    usage_logger.setLevel(logging.INFO)
+    usage_logger.propagate = False
+app = FastAPI(title="HR Agent — Harbour Finch Labs", description="聊天與公司文件閱讀", version="2.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[origin.strip() for origin in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",") if origin.strip()],
+    allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["Content-Type"],
 )
 
+
 class ChatMessage(BaseModel):
-    role: str
-    content: str
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=4000)
 
 
 class ChatRequest(BaseModel):
-    message: str
-    employee_id: str = DEFAULT_EMPLOYEE_ID
-    history: list[ChatMessage] = Field(default_factory=list)
+    message: str = Field(min_length=1, max_length=4000)
+    history: list[ChatMessage] = Field(default_factory=list, max_length=200)
 
 
-class CompleteTaskRequest(BaseModel):
-    employee_id: str = DEFAULT_EMPLOYEE_ID
+def _history(request: ChatRequest) -> list[dict]:
+    if not request.message.strip():
+        raise HTTPException(status_code=400, detail="請先輸入問題。")
+    try:
+        validate_message_length(request.message)
+    except InputValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return [message.model_dump() for message in request.history]
 
 
-def _validate_chat_request(request: ChatRequest) -> list[dict]:
-    validate_message_length(request.message)
-    for msg in request.history:
-        validate_message_length(msg.content)
-    return [m.model_dump() for m in request.history]
+def _safe_error(exc: Exception) -> str:
+    if isinstance(exc, (ChatError, EmbeddingError)):
+        return str(exc)
+    logger.error("chat failed error_type=%s", type(exc).__name__)
+    return "暫時未能完成回覆，請稍後再試；你仍可直接閱讀公司文件。"
 
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/documents")
+def documents():
+    return {"documents": list_documents()}
 
 
 @app.get("/api/documents/{filename}")
@@ -78,71 +80,25 @@ def source_document(filename: str):
 
 
 @app.post("/api/chat")
-def chat(request: ChatRequest):
+async def chat(request: ChatRequest):
+    history = _history(request)
     try:
-        history = _validate_chat_request(request)
-        result = run_agent(request.message, request.employee_id, history)
-        return result
-    except InputValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        return await run_async(request.message, history)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=_safe_error(exc)) from None
 
 
 @app.post("/api/chat/stream")
 async def chat_stream(request: ChatRequest):
-    try:
-        history = _validate_chat_request(request)
-    except InputValidationError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    history = _history(request)
 
-    async def event_generator():
+    async def events():
         try:
-            async for event in stream_agent(request.message, request.employee_id, history):
+            async for event in stream_agent(request.message, history=history):
                 yield f"event: {event['event']}\ndata: {json.dumps(event['data'])}\n\n"
-        except Exception as e:
-            yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
+        except Exception as exc:
+            yield f"event: error\ndata: {json.dumps({'message': _safe_error(exc)})}\n\n"
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
-@app.get("/api/onboarding/{employee_id}/status")
-def onboarding_status(employee_id: str):
-    return get_onboarding_status(employee_id)
-
-
-@app.post("/api/onboarding/{employee_id}/tasks/{task_id}/complete")
-def mark_task_complete(employee_id: str, task_id: int, body: CompleteTaskRequest | None = None):
-    result = complete_task(task_id, employee_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return result
-
-
-@app.post("/api/onboarding/{employee_id}/reset")
-def reset_onboarding(employee_id: str):
-    reset_employee_data(employee_id)
-    return {"status": "reset", "employee_id": employee_id}
-
-
-@app.get("/api/admin/checkins")
-def admin_checkins(employee_id: str | None = None):
-    return {"checkins": list_checkins(employee_id)}
-
-
-@app.get("/api/evals/results")
-def eval_results():
-    return load_eval_reports()
-
-
-@app.get("/api/employee/demo")
-def demo_employee() -> dict[str, Any]:
-    return dict(DEMO_EMPLOYEE)
+    return StreamingResponse(events(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache", "X-Accel-Buffering": "no",
+    })

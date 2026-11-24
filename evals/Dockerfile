@@ -4,7 +4,6 @@ WORKDIR /app
 
 COPY backend/requirements.txt /app/backend/requirements.txt
 COPY evals/requirements.txt /app/evals/requirements.txt
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt -r /app/evals/requirements.txt
 
 COPY shared /app/shared

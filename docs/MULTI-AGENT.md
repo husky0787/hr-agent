@@ -1,123 +1,26 @@
-# How the Multi-Agent Flow Works
+# 聊天圖與供應商備援
 
-HR Agent uses a **supervisor graph** (LangGraph), not a single chatbot. When you send a message, a security pre-check runs first, then an orchestrator delegates to specialist agents, then a synthesizer writes the final reply.
-
----
-
-## Architecture
+本版保留 LangGraph，使用三個節點處理文件問答。
 
 ```mermaid
-flowchart TB
-  User --> Security{Pure injection attack?}
-  Security -->|yes| Fallback[Safe fallback — graph skipped]
-  Security -->|no| Orchestrator
-  Orchestrator -->|needs_research| Research[Research Agent]
-  Orchestrator -->|needs_workflow| Workflow[Workflow Agent]
-  Orchestrator -->|neither| Synthesizer
-  Research -->|also needs_workflow| Workflow
-  Research --> Synthesizer
-  Workflow --> Synthesizer
-  Synthesizer --> OutputGuard[validate_output]
-  OutputGuard --> User
+flowchart TD
+    Input[輸入檢查] --> Security{純提示注入？}
+    Security -->|是| Safe[安全回覆]
+    Security -->|否| Topics[辨識主題：本地中英文規則]
+    Topics --> Retrieve[分項檢索：Jina API + Chroma]
+    Retrieve --> Answer[回答：GPT 優先]
+    Answer -->|可切換故障| XAI[xAI 備援]
+    Answer --> Validate[輸出檢查及引用限制]
+    XAI --> Validate
+    Validate --> SSE[完整答案分段 SSE]
 ```
 
-| Agent | Role | Tools |
-|---|---|---|
-| **Security gate** | Blocks pure injection before agents run | None |
-| **Orchestrator** | Routes to specialists; disables workflow on injection | None (structured routing) |
-| **Research** | Handbook / policy Q&A with citations | `search_handbook_tool` |
-| **Workflow** | Checklist-grounded tasks and check-ins | `search_handbook_tool`, `create_onboarding_task_tool`, `list_onboarding_tasks_tool`, `schedule_checkin_tool` |
-| **Synthesizer** | Merges specialist outputs into one answer | None |
+檢索直接執行，不使用 LLM 路由或 ReAct 工具循環。回答一般只呼叫一次聊天模型。原本 workflow 不在 Web 執行路徑，沒有任務或會面寫入工具。
 
-See [SECURITY.md](./SECURITY.md) for the full security layer.
+`agent/providers.py` 負責 Responses API、供應商專屬 Key／標頭、請求時間與輸出限制，以及程序內的冷卻機制。GPT 正常不會呼叫 xAI；可切換錯誤後冷卻 60 秒，下一個問題才探測恢復；內容安全拒絕不切換。
 
----
+`agent/multi_agent.py` 負責三節點圖、最多十則／12,000 字元歷史、參考文件隔離及來源限制。`shared/topics.py` 從實際章節及同義詞辨識主題；`shared/rag.py` 將未快取的主題查詢批次 embedding，再分項檢索及合併。主題辨識不呼叫 LLM。答案引用使用中文文件名稱，API 仍以白名單檔名讀取原文。`agent/onboarding_agent.py` 保留離線工具使用的入口名稱，但不再處理入職工作流程。
 
-## Step-by-step
+為避免主服務半段答案混入備援答案，本版先完成上游回答及輸出檢查，再發送 `citations`、`token`、`done`。前端把串流未收到 `done` 視為中斷，不能當作完整成功。
 
-### 0. Security pre-check
-
-- `scan_messages_for_injection()` flags override attempts in message + history
-- `is_pure_injection_attack()` → if injection with no HR intent, return safe fallback **without running any agent**
-- User input wrapped in `<user_input>` tags before reaching agents
-
-### 1. Orchestrator
-
-- Uses the configured `OPENAI_MODEL` with structured output (`RoutePlan`)
-- Reads wrapped user message (+ last 4 chat turns)
-- Read-only company introductions and policy questions use research; explicit saved-task or check-in requests use workflow
-- If `injection_suspected` → forces `needs_workflow=false`
-- If pure attack → both flags false (but graph is already skipped at step 0)
-
-### 2. Research agent (if routed)
-
-- ReAct loop (up to 6 steps)
-- Searches Chroma RAG over seed HR docs
-- Returns text + citations + tool call log
-
-### 3. Workflow agent (if routed)
-
-- ReAct agent for tasks and check-ins
-- Searches the onboarding checklist before creating tasks and lists existing tasks to avoid duplicates
-- Write tools blocked when `injection_suspected=true`
-- Server-side validation in `shared/tasks.py`
-
-### 4. Synthesizer
-
-- Built from specialist outputs (not raw user instructions)
-- `validate_output()` blocks hijacked canned responses
-- Shares the configured model and provider with the other roles
-
----
-
-## Routing examples
-
-**"What's the remote work policy?"**
-
-```
-Security → Orchestrator → Research → Synthesizer
-```
-
-**"I just started — what should I do this week?"**
-
-```
-Security → Orchestrator → Workflow → Synthesizer
-```
-
-**Pure injection attack**
-
-```
-Security → Safe fallback (no agents)
-```
-
----
-
-## UI: Agent flow log
-
-| Status | Meaning | Example |
-|---|---|---|
-| `blocked` | Security early exit | `Security · Prompt-injection attempt detected` |
-| `started` | Agent began work | `→ Research · Searching handbook...` |
-| `completed` | Agent finished | `✓ Orchestrator · Policy question needs handbook lookup` |
-| `tool` | Tool was called | `⚙ Research · search_handbook_tool(...)` |
-
----
-
-## Source files
-
-```
-backend/agent/
-├── security.py         # Injection detection, wrapping, output guardrail
-├── multi_agent.py      # LangGraph supervisor graph + streaming
-├── onboarding_agent.py # run_agent / stream_agent entrypoints
-└── tools.py            # Research vs workflow tool sets
-```
-
----
-
-## Related
-
-- [SECURITY.md](./SECURITY.md)
-- [EVALS.md](./EVALS.md) — 22/28 golden baseline; all injection scenarios pass
-- [DEPLOY-VPS.md](./DEPLOY-VPS.md)
-- [RUN.md](./RUN.md)
+完整規則見 [規格](specs/chat-document-demo.md)，安全邊界見 [SECURITY](SECURITY.md)。

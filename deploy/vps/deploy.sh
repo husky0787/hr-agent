@@ -9,7 +9,7 @@ SERVICE="${1:-all}"
 cd "${APP_DIR}"
 
 if [[ ! -f .env ]]; then
-  echo "Missing ${APP_DIR}/.env — copy .env.example and set OPENAI_API_KEY"
+  echo "Missing ${APP_DIR}/.env — configure GPT, xAI and Jina credentials"
   exit 1
 fi
 
@@ -37,13 +37,6 @@ case "${SERVICE}" in
     ;;
 esac
 
-# After app deploy, refresh golden eval report for /admin/evals (non-blocking).
-if [[ "${SERVICE}" == "all" || "${SERVICE}" == "backend" ]]; then
-  if bash "${APP_DIR}/deploy/vps/run-evals.sh"; then
-    echo "==== Golden evals passed ===="
-  else
-    echo "==== WARNING: Golden evals below pass threshold (deploy succeeded) ===="
-  fi
-fi
+# Evals consume external API credits; run only via the explicit `evals` action.
 
 docker compose -f "${COMPOSE_FILE}" ps

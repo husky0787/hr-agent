@@ -19,7 +19,6 @@ sys.path.insert(0, str(ROOT / "backend"))
 from agent.onboarding_agent import run_agent  # noqa: E402
 from shared.eval_results import golden_report_path, results_dir
 from shared.config import DEFAULT_EMPLOYEE_ID  # noqa: E402
-from shared.tasks import list_onboarding_tasks, reset_employee_data  # noqa: E402
 
 EVALS_DIR = Path(__file__).parent
 RESULTS_DIR = results_dir()
@@ -46,7 +45,6 @@ def count_tasks_created(tool_calls: list[dict]) -> int:
 
 def run_scenario(scenario: dict) -> dict:
     employee_id = f"eval-{scenario['id']}"
-    reset_employee_data(employee_id)
 
     result = run_agent(scenario["input"], employee_id=employee_id, history=[])
     response = result["response"]
@@ -68,10 +66,6 @@ def run_scenario(scenario: dict) -> dict:
     if "tools_not_called" in expect:
         names = {tc["name"] for tc in tool_calls}
         checks["tools_not_called"] = not any(name in names for name in expect["tools_not_called"])
-
-    if "max_tasks_in_db" in expect:
-        tasks = list_onboarding_tasks(employee_id)
-        checks["max_tasks_in_db"] = len(tasks) <= expect["max_tasks_in_db"]
 
     if "tools_called" in expect:
         checks["tools_called"] = check_tools_called(tool_calls, expect["tools_called"])
@@ -111,8 +105,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    if not os.getenv("OPENAI_API_KEY"):
-        print("ERROR: OPENAI_API_KEY required for evals")
+    if not (os.getenv("OPENAI_API_KEY") or os.getenv("XAI_API_KEY")):
+        print("ERROR: A GPT or xAI key is required for evals")
         return 1
 
     scenarios = load_scenarios()

@@ -12,7 +12,6 @@ from deepeval.test_case import LLMTestCase, SingleTurnParams
 
 from agent.onboarding_agent import run_agent
 from shared.rag import search_handbook
-from shared.tasks import reset_employee_data
 
 EVALS_DIR = Path(__file__).parent
 DEFAULT_THRESHOLD = float(os.getenv("DEEPEVAL_THRESHOLD", "0.7"))
@@ -72,7 +71,6 @@ def build_metrics(scenario: dict) -> list[Any]:
 
 def run_scenario_deepeval(scenario: dict) -> dict[str, Any]:
     employee_id = f"deepeval-{scenario['id']}"
-    reset_employee_data(employee_id)
 
     result = run_agent(scenario["input"], employee_id=employee_id, history=[])
     response = result["response"]

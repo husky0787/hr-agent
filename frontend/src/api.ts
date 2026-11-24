@@ -1,197 +1,69 @@
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
-export async function fetchSourceDocument(filename: string, signal?: AbortSignal): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/documents/${encodeURIComponent(filename)}`, { signal });
-  if (!res.ok) {
-    throw new Error(res.status === 404 ? '找不到這份公司文件。' : '暫時未能載入文件，請稍後再試。');
-  }
-  const data: { content: string } = await res.json();
-  return data.content;
-}
-
+export interface CompanyDocument { filename: string; title: string }
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   citations?: string[];
-  toolCalls?: string[];
-  agentEvents?: AgentEvent[];
+  failed?: boolean;
 }
 
-export interface AgentEvent {
-  agent: string;
-  status: string;
-  detail: string;
+export async function fetchDocuments(signal?: AbortSignal): Promise<CompanyDocument[]> {
+  const response = await fetch(`${API_BASE}/api/documents`, { signal });
+  if (!response.ok) throw new Error('暫時未能載入文件清單。');
+  return (await response.json()).documents;
 }
 
-export interface OnboardingTask {
-  id: number;
-  title: string;
-  due_day: number;
-  category: string;
-  status: string;
-}
-
-export interface OnboardingStatus {
-  employee_id: string;
-  total_tasks: number;
-  completed_tasks: number;
-  completion_percent: number;
-  tasks: OnboardingTask[];
-}
-
-export interface DemoEmployee {
-  id: string;
-  name: string;
-  role: string;
-  start_day: number;
-  company: string;
-  company_zh: string;
-  department: string;
-  manager: string;
-  buddy: string;
-  is_demo: boolean;
-}
-
-export interface Checkin {
-  id: number;
-  employee_id: string;
-  day: number;
-  topic: string;
-  scheduled_at: string;
-}
-
-export interface EvalScenarioResult {
-  id: string;
-  input: string;
-  passed?: boolean;
-  error?: string;
-  checks?: Record<string, boolean>;
-  metrics?: { name: string; score: number | null; passed: boolean; reason?: string }[];
-  response_preview?: string;
-  tool_calls?: string[];
-}
-
-export interface EvalReport {
-  timestamp?: string;
-  total: number;
-  passed: number;
-  failed: number;
-  pass_rate_percent: number;
-  framework?: string;
-  results: EvalScenarioResult[];
-}
-
-export interface EvalSuiteReport {
-  available: boolean;
-  path: string;
-  report: EvalReport | null;
-}
-
-export interface EvalReportBundle {
-  results_dir: string;
-  golden: EvalSuiteReport;
-  deepeval: EvalSuiteReport;
-}
-
-export async function fetchEvalResults(): Promise<EvalReportBundle> {
-  const res = await fetch(`${API_BASE}/api/evals/results`);
-  if (!res.ok) {
-    const text = await res.text();
-    if (res.status === 404) {
-      throw new Error(
-        '找不到評估服務，請確認後端已更新並重新啟動。',
-      );
-    }
-    throw new Error(`未能載入評估結果（${res.status}）。${text}`);
-  }
-  return res.json();
-}
-
-export async function fetchDemoEmployee(): Promise<DemoEmployee> {
-  const res = await fetch(`${API_BASE}/api/employee/demo`);
-  return res.json();
-}
-
-export async function fetchOnboardingStatus(employeeId: string): Promise<OnboardingStatus> {
-  const res = await fetch(`${API_BASE}/api/onboarding/${employeeId}/status`);
-  return res.json();
-}
-
-export async function completeTask(employeeId: string, taskId: number): Promise<void> {
-  await fetch(`${API_BASE}/api/onboarding/${employeeId}/tasks/${taskId}/complete`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ employee_id: employeeId }),
-  });
-}
-
-export async function resetOnboarding(employeeId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/onboarding/${employeeId}/reset`, { method: 'POST' });
-  if (!res.ok) throw new Error('未能重設示範，請稍後再試。');
-}
-
-export async function fetchCheckins(employeeId?: string): Promise<Checkin[]> {
-  const params = employeeId ? `?employee_id=${encodeURIComponent(employeeId)}` : '';
-  const res = await fetch(`${API_BASE}/api/admin/checkins${params}`);
-  if (!res.ok) throw new Error('未能載入跟進會面，請稍後再試。');
-  const data = await res.json();
-  return data.checkins;
-}
-
-export async function sendChat(
-  message: string,
-  employeeId: string,
-  history: ChatMessage[],
-): Promise<{ response: string; tool_calls: { name: string }[]; citations: string[] }> {
-  const res = await fetch(`${API_BASE}/api/chat`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      message,
-      employee_id: employeeId,
-      history: history.map((m) => ({ role: m.role, content: m.content })),
-    }),
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+export async function fetchSourceDocument(filename: string, signal?: AbortSignal): Promise<string> {
+  const response = await fetch(`${API_BASE}/api/documents/${encodeURIComponent(filename)}`, { signal });
+  if (!response.ok) throw new Error(response.status === 404 ? '找不到這份公司文件。' : '暫時未能載入文件，請稍後再試。');
+  return (await response.json()).content;
 }
 
 export async function streamChat(
   message: string,
-  employeeId: string,
   history: ChatMessage[],
   onEvent: (event: string, data: unknown) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/chat/stream`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      message,
-      employee_id: employeeId,
-      history: history.map((m) => ({ role: m.role, content: m.content })),
-    }),
+  const response = await fetch(`${API_BASE}/api/chat/stream`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, signal,
+    body: JSON.stringify({ message, history: history.filter((item) => !item.failed && item.content)
+      .map(({ role, content }) => ({ role, content })) }),
   });
-  if (!res.ok || !res.body) throw new Error('暫時未能連接入職助理，請稍後再試。');
-
-  const reader = res.body.getReader();
+  if (!response.ok || !response.body) throw new Error('暫時未能連接文件助理，請稍後再試。');
+  const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split('\n\n');
-    buffer = parts.pop() || '';
-    for (const part of parts) {
-      const lines = part.split('\n');
-      let event = 'message';
-      let data = '';
-      for (const line of lines) {
-        if (line.startsWith('event: ')) event = line.slice(7);
-        if (line.startsWith('data: ')) data = line.slice(6);
-      }
-      if (data) onEvent(event, JSON.parse(data));
+  let completed = false;
+  function dispatch(part: string) {
+    let event = 'message';
+    const data: string[] = [];
+    for (const line of part.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice(6).trim();
+      if (line.startsWith('data:')) data.push(line.slice(5).trimStart());
     }
+    if (!data.length) return;
+    const payload = JSON.parse(data.join('\n'));
+    if (event === 'error') throw new Error(payload.message || '暫時未能完成回覆，請稍後再試。');
+    if (completed) throw new Error('收到重複的回覆，請稍後再試。');
+    if (event === 'done') completed = true;
+    onEvent(event, payload);
+  }
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+      buffer = buffer.replace(/\r\n/g, '\n');
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+      parts.forEach(dispatch);
+      if (done) break;
+    }
+    if (buffer.trim()) dispatch(buffer);
+    if (!completed) throw new Error('連線提早結束，未收到完整回覆，請重新傳送問題。');
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
   }
 }

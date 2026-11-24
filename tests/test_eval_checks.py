@@ -10,7 +10,6 @@ class GoldenAssertionTests(unittest.TestCase):
     def evaluate(self, response, expect):
         result = {"response": response, "tool_calls": [], "citations": []}
         with (
-            patch.object(run_evals, "reset_employee_data"),
             patch.object(run_evals, "run_agent", return_value=result),
         ):
             return run_evals.run_scenario({"id": "assertion-test", "input": "test", "expect": expect})
